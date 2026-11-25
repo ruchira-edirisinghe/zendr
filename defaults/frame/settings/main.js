@@ -35,12 +35,13 @@ const NOTE_KINDS = [
 // unless turned off, except those marked `off`. [id, title, about, off?]
 const FEATURE_GROUPS = [
   ["Panels", [
-    ["hub", "Hub", "The panel on the right: the coordinator, every agent, and the messages between sessions."],
-    ["bell", "Notifications bell", "The bell in the tab bar, with its unread count and the inbox."],
+    ["hub", "Hub", "The Hub button in the toolbar and its drawer: the coordinator, every agent, and the messages between sessions."],
+    ["bell", "Notifications button", "The Notifications button in the toolbar, with its unread count and the drawer."],
   ]],
-  ["Sidebar and agents", [
+  ["Sidebar and sessions", [
     ["space_details", "Space details", "Under each space: the ports its programs listen on, its pull request and its session-bridge status."],
-    ["agent_summaries", "What each agent is doing", "Each agent's current task and a one-line summary in the Agents list."],
+    ["agent_summaries", "What each agent is doing", "Each agent's current task and a one-line summary in the Sessions list."],
+    ["agents_list", "Separate Agents list", "List agents again in their own section under the spaces, by priority or by space, instead of inside each space.", true],
     ["session_colors", "Session colours", "A colour on each session's row, tab and hub card."],
   ]],
   ["Code view and panes", [
