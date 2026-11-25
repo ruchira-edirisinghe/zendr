@@ -153,16 +153,32 @@
               "min": 260
             },
             {
-              "id": "hub",
-              "type": "block",
-              "content": {
-                "mod": "hub"
-              },
+              "id": "side",
+              "type": "stack",
+              "children": [
+                {
+                  "id": "hub",
+                  "type": "block",
+                  "content": {
+                    "mod": "hub"
+                  },
+                  "title": "Hub"
+                },
+                {
+                  "id": "notifications",
+                  "type": "block",
+                  "content": {
+                    "mod": "inbox"
+                  },
+                  "title": "Notifications"
+                }
+              ],
+              "active": "hub",
               "size": {
-                "px": 320
+                "px": 340
               },
-              "min": 260,
-              "max": 520
+              "min": 280,
+              "max": 560
             },
             {
               "id": "panel",

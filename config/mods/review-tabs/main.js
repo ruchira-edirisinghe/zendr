@@ -16,11 +16,19 @@ const prefs = () => shared("notify.prefs") ?? {};
 const keep = () => Number(prefs().keep) || 200;
 let seq = 0;
 
-// Opens the inbox, or goes to the newest unread notification and marks it read.
-function openInbox() { openOverlay({ mod: "inbox", kind: "popup", width: 400, height: 540 }); }
+// The right-side drawer (the layout's "side" stack) shows the hub or the notifications;
+// a toggle shows its child there, or hides the drawer when it's already showing it.
+function toggleSide(child, keep = false) {
+  const side = find(layout(), "side");
+  if (!side) { if (child === "notifications") openOverlay({ mod: "inbox", kind: "popup", width: 400, height: 540 }); return; }
+  if (!keep && !side.hidden && side.active === child) run("layout.hide", { id: "side" });
+  else { run("layout.select", { stack: "side", child }); run("layout.show", { id: "side" }); }
+}
+function openInbox() { toggleSide("notifications"); }
+// Goes to the newest unread notification and marks it read; with none, shows the notifications.
 function jumpUnread() {
   const entry = (shared("inbox.log") ?? []).find(e => !e.read);
-  if (!entry) { openInbox(); return; }
+  if (!entry) { toggleSide("notifications", true); return; }
   setShared("inbox.log", (shared("inbox.log") ?? []).map(e => e.id === entry.id ? { ...e, read: true } : e));
   if (entry.terminal) {
     if (entry.space) run("space.select", { id: entry.space });
@@ -91,6 +99,7 @@ export default class Tabs extends View {
       for (;;) {
         const command = await nextCommand();
         if (command === "inbox") openInbox();
+        else if (command === "hub") { if (feature("hub")) toggleSide("hub"); }
         else if (command === "jump-unread") jumpUnread();
         else if (command === "color") pickFocusedColor();
         else if (command === "command-search") openCommands("history");
@@ -141,10 +150,9 @@ export default class Tabs extends View {
     setShared("notify.prefs", n && typeof n === "object" ? n : {});
     // Settings → Features: what Zendr shows (all on unless turned off), for every mod.
     setShared("zendr.features", f && typeof f === "object" ? f : {});
-    const hub = find(layout(), "hub");
-    if (hub && f?.hub === false && !hub.hidden) run("layout.hide", { id: "hub" });
-    if (hub && f?.hub !== false && hub.hidden && this.hubOff) run("layout.show", { id: "hub" });
-    this.hubOff = f?.hub === false;
+    // The hub turned off: the drawer stops showing it.
+    const side = find(layout(), "side");
+    if (side && f?.hub === false && !side.hidden && side.active === "hub") run("layout.hide", { id: "side" });
     cx.notify();
   }
 
@@ -332,15 +340,19 @@ export default class Tabs extends View {
     const badge = prefs().badge ?? "count", quiet = (prefs().quiet_until ?? 0) > Date.now();
     this.syncPanel(space, panel, body, enabled);
     this.syncViews(space, root);
+    const side = find(root, "side");
+    const sideOn = (child) => Boolean(side && !side.hidden && side.active === child);
+    const viewOn = (id) => { const n = find(root, id); return Boolean(n && !n.hidden); };
+    const toggle = (id, icon, label, on, tip, action, extra) => h_flex().id(`tb-${id}`).h(28).px(9).gap(6).flex_none().items_center().rounded(7)
+      .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted).border_1().border_color(on ? t.border : t.chrome)
+      .hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip(tip).on_mouse_down("left", stop)
+      .on_click(() => action()).child(svg(icon).size(14)).child(label).when(Boolean(extra), el => el.child(extra));
     const panelButton = (id, label, icon) => {
-      const on = panel && !panel.hidden && body?.active === id;
-      return h_flex().id(`panel-${id}`).h(26).px(8).gap(5).flex_none().items_center().rounded(6)
-        .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted)
-        .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
-        .on_click(() => {
-          if (on) run("layout.hide", { id: "panel" });
-          else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
-        }).child(svg(icon).size(14)).child(label);
+      const on = Boolean(panel && !panel.hidden && body?.active === id);
+      return toggle(`panel-${id}`, icon, label, on, `Show or hide the ${label} panel`, () => {
+        if (on) run("layout.hide", { id: "panel" });
+        else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
+      });
     };
     return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome).border_b(1).border_color(t.border)
       .on_mouse_up("left", () => { this.pressed = null; })
@@ -349,18 +361,26 @@ export default class Tabs extends View {
         .on_size_change((_size, cx) => { if (active >= 0) { this.scroll.scroll_to_item(active); cx.notify(); } })
         .children(shown.map(item)))
       .child(button("tab-new", svg("mods/workspace-chrome/plus.svg").size(14), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), "New tab or terminal"))
-      .when(feature("command_search") || feature("ai_command"), el => el.child(button("command-search", svg("mods/commands/workflow.svg").size(14),
-        () => openCommands(feature("command_search") ? "history" : "ai"), "Command search: history, workflows and Ask AI (Ctrl+Shift+R)")))
-      .when(feature("bell"), el => el.child(div().id("inbox-bell").relative().flex_none()
-        .tooltip(unread ? `Notifications: ${unread} unread (Ctrl+Shift+I)` : "Notifications (Ctrl+Shift+I)")
-        .child(button("inbox", svg("mods/review-tabs/bell.svg").size(14), openInbox))
-        // Settings → Notifications: a number, a dot, or nothing.
-        .when(unread > 0 && badge === "count", el => el.child(div().absolute().top(1).right(0).min_w(14).h(14).px(3).rounded(7).bg(t.blocked)
-          .flex().items_center().justify_center().text_size(9.5).font_semibold().text_color(t.background).child(unread > 99 ? "99+" : String(unread))))
-        .when(unread > 0 && badge === "dot", el => el.child(div().absolute().top(4).right(4).size(8).rounded(4).bg(t.blocked)))
-        .when(quiet, el => el.child(div().absolute().bottom(2).right(1).size(9).rounded(5).bg(t.working).border_1().border_color(t.chrome)))))
-      .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
+      // The toolbar: every panel is a labelled toggle, lit while it's showing.
+      .child(div().w(1).h(18).mx(5).flex_none().bg(t.border))
+      .when(feature("command_search") || feature("ai_command"), el => el.child(toggle("commands", "mods/commands/workflow.svg", "Commands", false,
+        "Command search: history, workflows and Ask AI (Ctrl+Shift+R)", () => openCommands(feature("command_search") ? "history" : "ai"))))
+      .when(Boolean(find(root, "explorer")), el => el.child(toggle("explorer", "mods/workspace-chrome/panel-left.svg", "Explorer", viewOn("explorer"),
+        "Show or hide the file explorer", () => run("layout.toggle", { id: "explorer" }))))
+      .when(Boolean(find(root, "code")), el => el.child(toggle("code", "mods/workspace-chrome/file-text.svg", "Code", viewOn("code"),
+        "Show or hide the code reviewer", () => run("layout.toggle", { id: "code" }))))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
+      .when(feature("hub") && Boolean(find(root, "side")), el => el.child(toggle("hub", "mods/hub/users.svg", "Hub", sideOn("hub"),
+        "The coordinator, every agent and their messages", () => toggleSide("hub"))))
+      .when(feature("bell"), el => el.child(toggle("bell", "mods/review-tabs/bell.svg", "Notifications", sideOn("notifications"),
+        unread ? `${unread} unread (Ctrl+Shift+I)` : "Notifications (Ctrl+Shift+I)", () => toggleSide("notifications"),
+        // Settings → Notifications: a number, a dot, or nothing; a moon while do not disturb is on.
+        h_flex().gap(4).items_center()
+          .when(unread > 0 && badge === "count", el => el.child(div().min_w(16).h(16).px(4).rounded(8).bg(t.blocked).flex().items_center().justify_center()
+            .text_size(10).font_semibold().text_color(t.background).child(unread > 99 ? "99+" : String(unread))))
+          .when(unread > 0 && badge === "dot", el => el.child(div().size(7).rounded(4).bg(t.blocked)))
+          .when(quiet, el => el.child(svg("mods/inbox/moon.svg").size(12).text_color(t.working))))))
+      .child(div().w(1).h(18).mx(5).flex_none().bg(t.border))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/review-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/review-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/review-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));
