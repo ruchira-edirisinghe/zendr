@@ -8,6 +8,7 @@ const I = (name) => `frame/settings/${name}.svg`;
 
 const SECTIONS = [
   { id: "look", title: "Look", icon: "palette" },
+  { id: "features", title: "Features", icon: "sliders" },
   ...(window()?.platform === "macos" ? [{ id: "keyboard", title: "Keyboard", icon: "keyboard" }] : []),
   { id: "machines", title: "Machines", icon: "server" },
   { id: "alerts", title: "Notifications", icon: "bell" },
@@ -30,6 +31,30 @@ const NOTE_KINDS = [
   ["bridge", "Session messages", "From Claude Code sessions on the session bridge.", false],
   ["other", "Other notices", "Errors, updates and messages from mods.", false],
 ];
+// Settings → Features: what Zendr shows (settings.json `features.<id>`). Each is on
+// unless turned off, except those marked `off`. [id, title, about, off?]
+const FEATURE_GROUPS = [
+  ["Panels", [
+    ["hub", "Hub", "The panel on the right: the coordinator, every agent, and the messages between sessions."],
+    ["bell", "Notifications bell", "The bell in the tab bar, with its unread count and the inbox."],
+  ]],
+  ["Sidebar and agents", [
+    ["space_details", "Space details", "Under each space: the ports its programs listen on, its pull request and its session-bridge status."],
+    ["agent_summaries", "What each agent is doing", "Each agent's current task and a one-line summary in the Agents list."],
+    ["session_colors", "Session colours", "A colour on each session's row, tab and hub card."],
+  ]],
+  ["Code view and panes", [
+    ["hints", "Shortcut hints", "The line of keyboard shortcuts under the code view."],
+    ["pane_buttons", "Always show pane buttons", "Show a pane's header buttons all the time, not only when the pointer is over it.", true],
+  ]],
+  ["Warp-style tools", [
+    ["command_search", "Command search (Ctrl+Shift+R)", "Search your shell history and saved workflows, then paste one into the terminal or run it."],
+    ["workflows", "Workflows", "Saved commands with {{placeholders}}, in Command search."],
+    ["ai_command", "Ask AI for a command (Ctrl+Shift+Space)", "Describe what you want; Claude Code writes the command. Uses your Claude account."],
+    ["launch_configs", "Launch configurations (Ctrl+Shift+J)", "Save your spaces and tabs as a setup, and open it again later."],
+  ]],
+];
+
 // Do not disturb ends at quiet_until (ms); "always" is far enough away.
 const FOREVER = 9e12;
 const clock = (ms) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -749,6 +774,62 @@ export default class Settings extends View {
 
   // Alerts ---------------------------------------------------------------
 
+  // Features ---------------------------------------------------------------
+
+  features(t) {
+    const f = this.person.features ?? {};
+    const all = FEATURE_GROUPS.flatMap(([, list]) => list);
+    const onCount = all.filter(([id, , , off]) => (off ? f[id] === true : f[id] !== false)).length;
+    const setAll = (on, cx) =>
+      this.change((p) => {
+        p.features = { ...(p.features ?? {}) };
+        for (const [id, , , off] of all) {
+          if (off) continue;
+          if (on) delete p.features[id];
+          else p.features[id] = false;
+        }
+        setShared("zendr.features.changed", Date.now());
+      }, cx);
+    return v_flex()
+      .w_full()
+      .child(
+        h_flex()
+          .w_full()
+          .pb(14)
+          .gap(10)
+          .items_center()
+          .child(div().flex_1().text_size(12.5).line_height("18px").text_color(t.dim).child(`Turn off anything you don't use. ${onCount} of ${all.length} are on. Changes apply at once.`))
+          .child(this.button(t, "st-f-all-on", "Turn all on", (_e, cx) => setAll(true, cx)))
+          .child(this.button(t, "st-f-all-off", "Keep it simple", (_e, cx) => setAll(false, cx))),
+      )
+      .children(
+        FEATURE_GROUPS.map(([group, list]) =>
+          v_flex()
+            .w_full()
+            .pb(18)
+            .child(this.heading(t, group))
+            .children(
+              list.map(([id, title, about, off]) => {
+                const on = off ? f[id] === true : f[id] !== false;
+                return this.row(
+                  t,
+                  title,
+                  about,
+                  this.toggle(t, `st-f-${id}`, on, (_e, cx) =>
+                    this.change((p) => {
+                      p.features = { ...(p.features ?? {}) };
+                      if (off ? !on : on) p.features[id] = off ? true : false;
+                      else delete p.features[id];
+                      setShared("zendr.features.changed", Date.now());
+                    }, cx),
+                  ),
+                );
+              }),
+            ),
+        ),
+      );
+  }
+
   // One of a few: [value, label] pairs, the chosen one raised.
   choice(t, id, options, now, pick) {
     return h_flex()
@@ -1163,6 +1244,8 @@ export default class Settings extends View {
                         ? this.keyboard(t)
                       : this.section === "machines"
                         ? this.machines(t)
+                      : this.section === "features"
+                        ? this.features(t)
                       : this.section === "alerts"
                         ? this.alerts(t)
                         : this.section === "privacy"
