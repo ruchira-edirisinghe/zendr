@@ -1,0 +1,6 @@
+{
+  "place": "none",
+  "palette": [
+    { "title": "Notifications", "command": "mod.open", "args": { "name": "inbox" }, "words": "inbox unread agents attention" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "place": "none",
+  "palette": [
+    { "title": "Code view beside the terminal", "command": "pane.split", "args": { "direction": "right", "mod": "review-file", "props": {} }, "words": "explorer files review diff split vscode" },
+    { "title": "Code view in a new tab", "command": "tab.new", "args": { "name": "Code", "mod": "review-file", "props": { "tab": true } }, "words": "explorer files review diff vscode" }
+  ]
+}
