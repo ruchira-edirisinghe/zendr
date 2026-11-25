@@ -1,0 +1,81 @@
+<p align="center"><img src="docs/zendr.png" width="128" alt="Zendr"></p>
+
+<h1 align="center">Zendr</h1>
+
+<p align="center">A desktop terminal app for coding agents. Native on Windows ARM64, with a built-in code reviewer and cmux-style agent tracking.</p>
+
+Zendr is made from the code of **[Herdr](https://herdr.dev)** ([herdrdev](https://github.com/herdrdev)), the software it grew out of. Herdr does the hard part: terminals that keep running in a background core, agent status, spaces and tabs, a mod system, and a GPU-rendered UI. Zendr is Herdr's desktop app built natively for Windows on ARM. It is renamed, has a new icon, and adds a code reviewer and features inspired by **[cmux](https://cmux.com)**. Thanks to both projects.
+
+## What's in it
+
+**From Herdr.** Spaces, tabs and split panes; terminals that survive closing or updating the app; agent status for Claude Code, Codex and others; other machines over SSH; a command palette; themes; and mods, which are small JavaScript files that can change any part of the UI.
+
+**Code reviewer.** A space opens with three blocks: a VS Code-style file explorer on the left, the code reviewer in the middle, and the terminal on the right.
+- The code reviewer shows each file whole, with changes inline. Lines are numbered both as they were in the last commit and as they are now.
+- It has syntax highlighting and a change ruler. `n`/`p` (or F7) jump between changes.
+- It can show only the changed parts, or open the file in VS Code at that line.
+- Right-click a tab to show or hide any of the three blocks. Each space remembers its choice.
+- The Changes panel can open any changed file in full, beside the terminal or in its own tab.
+
+**Inspired by cmux:**
+- **Notifications inbox.** A bell in the tab bar shows an unread count. Each time an agent needs you or finishes, and each notification, is listed newest first. Click one to go to it. `Ctrl+Shift+I` opens the inbox; `Ctrl+Shift+U` jumps to the latest unread.
+- **Attention rings.** A pane whose agent needs you gets a tinted header with a coloured edge. Its tab lights up too.
+- **A sidebar that says what each space is up to.** Under a space's name: the ports its programs listen on, its branch's pull request (via `gh`), its session-bridge status, and its latest unread notification.
+- **Agents that say what they're doing.** Each agent in the Agents list shows its current task (its title) and a one-line summary: the question it's asking, the step it's on, or its last message.
+- **Session bridge.** The [session-bridge](https://github.com/iddhi-sulakshana/claude-mods/tree/main/claude-session-bridge) Claude Code mod lets Claude sessions message each other and hand off work. In Zendr it:
+  - opens a new space for a new session (`/bridge-spawn builder build`)
+  - switches to another session (`/bridge-focus`)
+  - names tabs after their sessions
+  - shows its status in the sidebar and its held messages in the inbox
+
+A few cmux features aren't here. The in-app browser isn't possible, because Herdr's mod API has no web view. Session restore, SSH machines, a CLI and workspace number keys were already in Herdr.
+
+## Layout of this repository
+
+| Folder | What it is | Made from |
+| --- | --- | --- |
+| `app/` | The Zendr desktop app (Rust, GPUI, Direct3D on Windows) | [herdr-app](https://github.com/herdrdev/herdr-app) v0.1.18 |
+| `core/` | herdr-core and its CLI `hc`, which run the terminals | [herdr-core](https://github.com/herdrdev/herdr-core) v0.1.22, with Windows ARM64 fixes |
+| `tui/` | herdr, Herdr's terminal UI, with a Windows ARM64 build script | [herdr](https://github.com/herdrdev/herdr) v0.9.5 |
+| `config/` | Zendr's mods, its layout and shortcuts, and `install.ps1` | New, and clones of Herdr's built-in mods |
+
+`app/`, `core/` and `tui/` are git subtrees, and each keeps its upstream license and notices. Their full histories are on the `zendr` and `windows-arm64` branches of [herdr-app](https://github.com/ruchira-edirisinghe/herdr-app/tree/zendr), [herdr-core](https://github.com/ruchira-edirisinghe/herdr-core/tree/windows-arm64) and [herdr](https://github.com/ruchira-edirisinghe/herdr/tree/windows-arm64).
+
+Changes from Herdr:
+- **app.** The name Zendr wherever people read it, the lizard icon, a credit in Settings, and an ARM64 build-and-install script.
+- **core.** A static CRT, the ARM64 ConPTY (`OpenConsole.exe`), and an installer that takes a local ARM64 build.
+
+Internal names are unchanged, so Herdr setups and tools keep working: `herdr-app.exe`, `hc`, `~/.config/herdr-app` and the key contexts. The installer also adds a `zendr` command.
+
+## Build and install (Windows ARM64)
+
+You need:
+- Rust (`aarch64-pc-windows-msvc`)
+- Visual Studio Build Tools with the ARM64 tools, and the Windows SDK
+- LLVM for ARM64 (`clang`, `libclang`)
+- Zig 0.16.0, the x64 build. The native ARM64 Zig crashes on some Windows 11 builds.
+
+The header of `app/scripts/build-windows-arm64.ps1` has the expected paths.
+
+```powershell
+git clone https://github.com/ruchira-edirisinghe/zendr
+cd zendr
+powershell -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+It fetches Ghostty and builds and installs herdr-core, then Zendr. Zendr appears in the Start menu. The script finishes by installing the mods and layout. To install only the mods and layout into an existing Herdr or Zendr, run `.\config\install.ps1`.
+
+Other platforms: `app/` and `core/` build as upstream Herdr does (see their READMEs). The mods in `config/` work in any Herdr desktop app 0.1.18 or newer.
+
+## Updating from Herdr
+
+```powershell
+git subtree pull --prefix=app https://github.com/herdrdev/herdr-app master --squash
+git subtree pull --prefix=core https://github.com/herdrdev/herdr-core master --squash
+```
+
+Then rebuild.
+
+## License
+
+Apache License 2.0, the same as Herdr: see [LICENSE](LICENSE) and [NOTICE](NOTICE). "Herdr" is the Herdr authors' name for their software. Zendr is a separate build and is not made or endorsed by them or by cmux.

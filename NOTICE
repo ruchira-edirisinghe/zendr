@@ -1,0 +1,23 @@
+Zendr
+Copyright 2026 the Zendr authors
+
+Zendr is made from the code of Herdr, its parent software, by the Herdr authors
+(https://github.com/herdrdev, https://herdr.dev), licensed under the Apache License 2.0:
+
+  app/   herdr-app (the Herdr desktop app) v0.1.18, renamed Zendr, with a new icon
+  core/  herdr-core v0.1.22, with Windows ARM64 changes
+  tui/   herdr v0.9.5, with a Windows ARM64 build script
+
+Each keeps its own LICENSE and third-party notices (app/THIRD-PARTY-NOTICES,
+app/licenses/). Changes from upstream are in each folder's history and listed in
+README.md. "Herdr" is the Herdr authors' name for their software; Zendr is a separate
+build and is not made or endorsed by them.
+
+Several of Zendr's features (the notifications inbox, attention rings, the sidebar's
+ports, pull request and notification line, agent summaries) are inspired by cmux
+(https://cmux.com) by Manaflow. No cmux code is included.
+
+The mods in config/ that are clones of Herdr's built-in mods (review-tabs, review-menu,
+review-toast, review-pane, review-spaces, review-agents, review-changes) name the mod and
+version they came from in their mod.json (cloned_from), and stay under the Apache
+License 2.0.
