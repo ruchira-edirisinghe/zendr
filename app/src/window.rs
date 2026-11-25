@@ -2377,8 +2377,10 @@ impl AppWindow {
     /// toast (drawn by the `toast` mod; click it to go there) unless they're
     /// looking at that agent.
     fn alert(&mut self, addr: &str, alert: model::Alert, looking: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if settings::get().sounds.enabled {
-            crate::sound::play(if alert == model::Alert::Blocked { "blocked" } else { "done" });
+        let kind = if alert == model::Alert::Blocked { "blocked" } else { "done" };
+        let quiet = &self.person.notifications;
+        if settings::get().sounds.enabled && !quiet.quiet() && quiet.sound(kind) {
+            crate::sound::play(kind);
         }
         // Needing the person brings a settled tab back.
         if let Some(ctx) = self.model.pane_of(&self.root_agent(addr)).and_then(|p| self.model.tab_of(&p)).map(|c| c.id.clone())
@@ -2406,8 +2408,9 @@ impl AppWindow {
             model::Alert::Blocked => (format!("{name} needs you"), "error"),
             model::Alert::Done => (format!("{name} finished"), "info"),
         };
+        // `kind` lets the toast mod follow Settings → Notifications for each kind.
         let notification = json!({
-            "title": title, "body": place, "level": level,
+            "title": title, "body": place, "level": level, "kind": kind, "name": name,
             "action": { "name": "agent.focus", "args": { "terminal": addr } },
         });
         self.open_overlay(mods::new_overlay_id(), json!({ "kind": "toast", "notification": notification }), window, cx);
@@ -4019,7 +4022,8 @@ impl AppWindow {
         }
         props["overlay"] = json!(id);
         let num = |k: &str, d: f32| spec.get(k).and_then(Value::as_f64).map_or(d, |v| v as f32);
-        let bundled_toast = kind == OverlayKind::Toast && name == "toast";
+        // Zendr's review-toast is the bundled one restyled: as tall as its content too.
+        let bundled_toast = kind == OverlayKind::Toast && (name == "toast" || name == "review-toast");
         let fit_toast = bundled_toast && spec.get("height").and_then(Value::as_f64).is_none();
         if bundled_toast {
             props["fitHeight"] = json!(fit_toast);
@@ -4040,10 +4044,8 @@ impl AppWindow {
         if kind == OverlayKind::Window && place.is_none() && spec.get("at").is_some_and(|v| v.get("x").is_some()) {
             place = Some(at);
         }
-        let timeout = props.get("timeout").and_then(Value::as_f64).unwrap_or(match props.get("level").and_then(Value::as_str) {
-            Some("error" | "warning") => 8000.0,
-            _ => 5000.0,
-        });
+        // Settings → Notifications says how long (None: until clicked).
+        let timeout = props.get("timeout").and_then(Value::as_f64).or_else(|| self.person.notifications.toast_ms(props.get("level").and_then(Value::as_str)));
         let slot = format!("overlay:{id}");
         // The frame takes the keyboard first, so a mod that focuses itself while loading wins.
         let focus = cx.focus_handle();
@@ -4068,7 +4070,7 @@ impl AppWindow {
             slot,
             at,
             size,
-            expires: (kind == OverlayKind::Toast).then(|| Instant::now() + Duration::from_millis(timeout as u64)),
+            expires: if kind == OverlayKind::Toast { timeout.map(|ms| Instant::now() + Duration::from_millis(ms as u64)) } else { None },
             focus,
             layout,
             top,

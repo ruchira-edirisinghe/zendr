@@ -2,7 +2,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, InputState, Input, Popup } from "gpui-base";
-import { hc, run, theme, themes, fonts, updates, telemetry, settings, layouts, shared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, notify, window } from "herdr";
+import { hc, run, theme, themes, fonts, updates, telemetry, settings, layouts, shared, setShared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, notify, window } from "herdr";
 
 const I = (name) => `frame/settings/${name}.svg`;
 
@@ -10,7 +10,7 @@ const SECTIONS = [
   { id: "look", title: "Look", icon: "palette" },
   ...(window()?.platform === "macos" ? [{ id: "keyboard", title: "Keyboard", icon: "keyboard" }] : []),
   { id: "machines", title: "Machines", icon: "server" },
-  { id: "alerts", title: "Alerts", icon: "bell" },
+  { id: "alerts", title: "Notifications", icon: "bell" },
   { id: "updates", title: "Updates", icon: "refresh" },
   { id: "privacy", title: "Privacy", icon: "shield" },
 ];
@@ -21,6 +21,18 @@ const APPEARANCES = [
   ["light", "Light"],
   ["dark", "Dark"],
 ];
+
+// Settings → Notifications: what each kind of notification does (settings.json
+// `notifications.<kind>.popup|sound|inbox`, all on unless turned off).
+const NOTE_KINDS = [
+  ["blocked", "An agent needs you", "It's waiting for your answer or approval.", true],
+  ["done", "An agent finished", "Only when you aren't looking at it.", true],
+  ["bridge", "Session messages", "From Claude Code sessions on the session bridge.", false],
+  ["other", "Other notices", "Errors, updates and messages from mods.", false],
+];
+// Do not disturb ends at quiet_until (ms); "always" is far enough away.
+const FOREVER = 9e12;
+const clock = (ms) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
 // What the app uses when settings.json names no font (settings.rs).
 const DEFAULT_FONT = "JetBrains Mono";
@@ -737,18 +749,188 @@ export default class Settings extends View {
 
   // Alerts ---------------------------------------------------------------
 
+  // One of a few: [value, label] pairs, the chosen one raised.
+  choice(t, id, options, now, pick) {
+    return h_flex()
+      .p(2)
+      .gap(2)
+      .rounded(8)
+      .border_1()
+      .border_color(t.border)
+      .bg(t.background)
+      .children(
+        options.map(([value, label]) =>
+          div()
+            .id(`${id}-${value}`)
+            .px(10)
+            .py(4)
+            .rounded(6)
+            .text_size(12.5)
+            .cursor_pointer()
+            .when(now === value, (el) => el.bg(t.raised).text_color(t.foreground).border_1().border_color(t.border))
+            .when(now !== value, (el) => el.text_color(t.muted).hover((s) => s.text_color(t.foreground)))
+            .on_click((_e, cx) => pick(value, cx))
+            .child(label),
+        ),
+      );
+  }
+
+  // Changes settings.json's `notifications` (the app and the notification mods read it).
+  changeNotes(edit, cx) {
+    this.change((p) => {
+      p.notifications = { ...(p.notifications ?? {}) };
+      edit(p.notifications);
+      setShared("notify.prefs.changed", Date.now());
+    }, cx);
+  }
+
+  // Pop-up, sound and inbox, for each kind of notification.
+  noteTable(t, n, soundsOn) {
+    const col = (child) => div().w(64).flex_none().flex().justify_center().child(child);
+    return v_flex()
+      .w_full()
+      .child(
+        h_flex()
+          .w_full()
+          .gap(12)
+          .pb(8)
+          .border_b(1)
+          .border_color(t.border)
+          .text_size(12)
+          .text_color(t.dim)
+          .child(div().flex_1().child("When"))
+          .children(["Pop-up", "Sound", "Inbox"].map((l) => col(l))),
+      )
+      .children(
+        NOTE_KINDS.map(([kind, title, about, hasSound]) => {
+          const p = n[kind] ?? {};
+          const flip = (what, on) => (_e, cx) => this.changeNotes((x) => (x[kind] = { ...(x[kind] ?? {}), [what]: !on }), cx);
+          const cell = (what) => {
+            const on = p[what] !== false;
+            return col(this.toggle(t, `st-n-${kind}-${what}`, on, flip(what, on)));
+          };
+          return h_flex()
+            .w_full()
+            .gap(12)
+            .py(10)
+            .items_center()
+            .border_b(1)
+            .border_color(t.border)
+            .child(
+              v_flex()
+                .flex_1()
+                .min_w(0)
+                .gap(3)
+                .child(div().text_size(14).text_color(t.foreground).child(title))
+                .child(div().text_size(12.5).line_height("18px").text_color(t.dim).child(about)),
+            )
+            .child(cell("popup"))
+            .child(hasSound ? div().when(!soundsOn, (el) => el.opacity(0.4)).child(cell("sound")) : col(div().text_color(t.dim).child("—")))
+            .child(cell("inbox"));
+        }),
+      );
+  }
+
   alerts(t) {
     const sounds = this.person.sounds ?? {};
     const on = sounds.enabled !== false;
+    const n = this.person.notifications ?? {};
     const file = (f) => (f ? f.split(/[\\/]/).pop() : "Zendr's sound");
+    const quietUntil = n.quiet_until ?? 0;
+    const quiet = quietUntil > Date.now();
+    const quietNow = !quiet ? "off" : n.quiet_mode ?? (quietUntil >= FOREVER ? "always" : "hour");
+    const setQuiet = (mode, cx) =>
+      this.changeNotes((x) => {
+        const now = new Date();
+        const morning = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (now.getHours() >= 8 ? 1 : 0), 8).getTime();
+        const until = { off: null, hour: Date.now() + 3600000, morning, always: FOREVER }[mode];
+        if (until) Object.assign(x, { quiet_until: until, quiet_mode: mode });
+        else { delete x.quiet_until; delete x.quiet_mode; }
+      }, cx);
     return v_flex()
       .w_full()
+      .child(this.heading(t, "What to tell you"))
+      .child(this.noteTable(t, n, on))
+      .child(
+        this.row(
+          t,
+          "Do not disturb",
+          quiet
+            ? quietUntil >= FOREVER ? "On until you turn it off. Notifications still go to the inbox." : `On until ${clock(quietUntil)}. Notifications still go to the inbox.`
+            : "Holds pop-ups and sounds. Notifications still go to the inbox.",
+          this.choice(t, "st-n-quiet", [["off", "Off"], ["hour", "1 hour"], ["morning", "Until 8:00"], ["always", "Until I turn it off"]], quietNow, setQuiet),
+        ),
+      )
+      .child(div().h(18))
+      .child(this.heading(t, "Pop-ups"))
+      .child(
+        this.row(
+          t,
+          "Show each pop-up for",
+          "Errors and warnings stay a little longer. Click a pop-up to go to where it came from.",
+          this.choice(t, "st-n-secs", [[3, "3 s"], [5, "5 s"], [8, "8 s"], [15, "15 s"], [0, "Until clicked"]], n.toast_seconds ?? 5, (v, cx) => this.changeNotes((x) => (x.toast_seconds = v), cx)),
+        ),
+      )
+      .child(
+        this.row(
+          t,
+          "Try it",
+          "Shows a pop-up the way notifications look now.",
+          this.button(t, "st-n-test", "Send a test", () => notify({ title: "This is a notification", body: "Click it to go to where it came from.", level: "info", kind: "other" })),
+        ),
+      )
+      .child(div().h(18))
+      .child(this.heading(t, "Inbox"))
+      .child(
+        this.row(
+          t,
+          "Bell badge",
+          "What the bell in the tab bar shows while some notifications are unread.",
+          this.choice(t, "st-n-badge", [["count", "Number"], ["dot", "Dot"], ["off", "Nothing"]], n.badge ?? "count", (v, cx) => this.changeNotes((x) => (x.badge = v), cx)),
+        ),
+      )
+      .child(
+        this.row(
+          t,
+          "Mark read when you go there",
+          "Opening the agent a notification is about marks it read.",
+          this.toggle(t, "st-n-visit", n.read_on_visit !== false, (_e, cx) => this.changeNotes((x) => (x.read_on_visit = n.read_on_visit === false), cx)),
+        ),
+      )
+      .child(
+        this.row(
+          t,
+          "Keep",
+          "The newest notifications the inbox keeps.",
+          this.choice(t, "st-n-keep", [[50, "50"], [200, "200"], [500, "500"]], n.keep ?? 200, (v, cx) => this.changeNotes((x) => (x.keep = v), cx)),
+        ),
+      )
+      .child(this.row(t, "Clear the inbox", "Removes every notification in it now.", this.button(t, "st-n-clear", "Clear", () => setShared("inbox.log", []))))
+      .child(div().h(18))
+      .child(this.heading(t, "Highlights"))
+      .child(
+        this.row(
+          t,
+          "Ring panes that need you",
+          "A coloured edge on a terminal whose agent needs you or just finished.",
+          this.toggle(t, "st-n-rings", n.rings !== false, (_e, cx) => this.changeNotes((x) => (x.rings = n.rings === false), cx)),
+        ),
+      )
+      .child(
+        this.row(
+          t,
+          "Latest notification under each space",
+          "In the sidebar, below the space's name.",
+          this.toggle(t, "st-n-sidebar", n.sidebar_note !== false, (_e, cx) => this.changeNotes((x) => (x.sidebar_note = n.sidebar_note === false), cx)),
+        ),
+      )
+      .child(div().h(18))
       .child(this.heading(t, "Sounds"))
       .child(
         this.row(
           t,
           "Play sounds",
-          "When an agent needs you, and when one finishes while you're not looking. A note shows in the corner either way.",
+          "Turn off every sound at once. The Sound column above picks them one by one.",
           this.toggle(t, "st-sounds", on, (_e, cx) => this.change((p) => (p.sounds = { ...(p.sounds ?? {}), enabled: !on }), cx)),
         ),
       )
