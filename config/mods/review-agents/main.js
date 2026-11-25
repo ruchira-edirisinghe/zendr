@@ -140,7 +140,11 @@ export default class Agents extends View {
         if (text !== (this.summaries[a.address]?.text ?? null)) changed = true;
         this.summaries[a.address] = { key, text };
       }
-      if (changed) cx.notify();
+      if (changed) {
+        // The hub (mods/hub) shows the same summaries.
+        setShared("agents.summaries", Object.fromEntries(Object.entries(this.summaries).map(([k, v]) => [k, v.text])));
+        cx.notify();
+      }
     } finally { this.reading = false; }
   }
 

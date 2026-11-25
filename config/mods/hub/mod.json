@@ -1,0 +1,7 @@
+{
+  "place": "none",
+  "title": "Hub",
+  "palette": [
+    { "title": "Show or hide the Hub", "command": "layout.toggle", "args": { "id": "hub" }, "words": "coordinator session bridge agents messages" }
+  ]
+}

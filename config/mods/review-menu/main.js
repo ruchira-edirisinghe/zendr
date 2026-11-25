@@ -22,7 +22,9 @@ function viewItems() {
   const shown = present.filter(([id]) => !findNode(root, id).hidden).length;
   return present.map(([id, name]) => findNode(root, id).hidden
     ? [`Show ${name}`, "layout.show", { id }]
-    : shown > 1 ? [`Hide ${name}`, "layout.hide", { id }] : null).filter(Boolean);
+    : shown > 1 ? [`Hide ${name}`, "layout.hide", { id }] : null).filter(Boolean)
+    // The hub sits beside the work, so it can always go.
+    .concat(findNode(root, "hub") ? [[findNode(root, "hub").hidden ? "Show hub" : "Hide hub", findNode(root, "hub").hidden ? "layout.show" : "layout.hide", { id: "hub" }]] : []);
 }
 
 // Where a space is now: its first terminal's live folder, else where it was made.

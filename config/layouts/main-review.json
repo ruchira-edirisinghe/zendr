@@ -153,6 +153,18 @@
               "min": 260
             },
             {
+              "id": "hub",
+              "type": "block",
+              "content": {
+                "mod": "hub"
+              },
+              "size": {
+                "px": 320
+              },
+              "min": 260,
+              "max": 520
+            },
+            {
               "id": "panel",
               "type": "column",
               "children": [
