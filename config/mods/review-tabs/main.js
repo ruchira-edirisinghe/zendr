@@ -10,7 +10,7 @@ import { spaces, panes, agents, terminals, hc, notify, run, openOverlay, theme, 
 
 // A session's own colour (mods/session-color), by terminal address.
 const SESSION_HEX = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
-const ownColor = (address) => { const c = address && (shared("agent.colors") ?? {})[address]; return c ? SESSION_HEX[c] ?? (c.startsWith("#") ? c : null) : null; };
+const ownColor = (address) => { const c = (shared("zendr.features") ?? {}).session_colors !== false && address && (shared("agent.colors") ?? {})[address]; return c ? SESSION_HEX[c] ?? (c.startsWith("#") ? c : null) : null; };
 // Settings → Notifications (settings.json `notifications`), read here for every mod.
 const prefs = () => shared("notify.prefs") ?? {};
 const keep = () => Number(prefs().keep) || 200;
@@ -28,6 +28,9 @@ function jumpUnread() {
     run("pane.focus", { terminal: entry.terminal });
   }
 }
+
+// Settings → Features (settings.json `features`): each on unless turned off.
+const feature = (id) => (shared("zendr.features") ?? {})[id] !== false;
 
 // Colour the focused session (mods/session-color).
 function pickFocusedColor() {
@@ -118,9 +121,16 @@ export default class Tabs extends View {
     const raw = await readTextFile(`${appHome()}/settings.json`).catch(() => null);
     if (raw === this.prefsRaw) return;
     this.prefsRaw = raw;
-    let n = {};
-    try { n = JSON.parse(raw ?? "{}")?.notifications ?? {}; } catch { return; } // mid-edit: keep the last
+    let person;
+    try { person = JSON.parse(raw ?? "{}") ?? {}; } catch { return; } // mid-edit: keep the last
+    const n = person.notifications, f = person.features;
     setShared("notify.prefs", n && typeof n === "object" ? n : {});
+    // Settings → Features: what Zendr shows (all on unless turned off), for every mod.
+    setShared("zendr.features", f && typeof f === "object" ? f : {});
+    const hub = find(layout(), "hub");
+    if (hub && f?.hub === false && !hub.hidden) run("layout.hide", { id: "hub" });
+    if (hub && f?.hub !== false && hub.hidden && this.hubOff) run("layout.show", { id: "hub" });
+    this.hubOff = f?.hub === false;
     cx.notify();
   }
 
@@ -324,14 +334,14 @@ export default class Tabs extends View {
         .on_size_change((_size, cx) => { if (active >= 0) { this.scroll.scroll_to_item(active); cx.notify(); } })
         .children(shown.map(item)))
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
-      .child(div().id("inbox-bell").relative().flex_none()
+      .when(feature("bell"), el => el.child(div().id("inbox-bell").relative().flex_none()
         .tooltip(unread ? `Notifications: ${unread} unread (Ctrl+Shift+I)` : "Notifications (Ctrl+Shift+I)")
         .child(button("inbox", svg("mods/review-tabs/bell.svg").size(14), openInbox))
         // Settings → Notifications: a number, a dot, or nothing.
         .when(unread > 0 && badge === "count", el => el.child(div().absolute().top(1).right(0).min_w(14).h(14).px(3).rounded(7).bg(t.blocked)
           .flex().items_center().justify_center().text_size(9.5).font_semibold().text_color(t.background).child(unread > 99 ? "99+" : String(unread))))
         .when(unread > 0 && badge === "dot", el => el.child(div().absolute().top(4).right(4).size(8).rounded(4).bg(t.blocked)))
-        .when(quiet, el => el.child(div().absolute().bottom(2).right(1).size(9).rounded(5).bg(t.working).border_1().border_color(t.chrome))))
+        .when(quiet, el => el.child(div().absolute().bottom(2).right(1).size(9).rounded(5).bg(t.working).border_1().border_color(t.chrome)))))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/review-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))

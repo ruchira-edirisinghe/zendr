@@ -28,6 +28,7 @@ const BRIEF = [
 // A session's colour (mods/session-color): its own, else its space's.
 const SESSION_HEX = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
 function sessionColor(address, space) {
+  if ((shared("zendr.features") ?? {}).session_colors === false) return null;
   const c = (address && (shared("agent.colors") ?? {})[address]) || (space && (shared("space.colors") ?? {})[space]);
   return c ? SESSION_HEX[c] ?? (c.startsWith("#") ? c : null) : null;
 }

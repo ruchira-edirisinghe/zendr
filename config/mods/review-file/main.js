@@ -811,7 +811,8 @@ export default class ReviewFile extends View {
           .child(div().absolute().top(0).bottom(0).right(12).w(6).children(this.ruler(t)))
           .when(!this.view.length, e => e.child(div().absolute().top(8).px(14).text_color(t.dim)
             .child(this.loading ? "Loading…" : path ? "" : this.root ? "Pick a file in the Explorer (☰) to view it" : "")))))
-      .child(h_flex().h(24).flex_none().px(14).gap(14).items_center().border_t(1).border_color(t.border).text_size(10).text_color(t.dim).overflow_hidden()
-        .child("n / F7: next change").child("p / Shift+F7: previous").child("c: changes only").child("e: explorer").child(this.part ? "Right-click a tab: show or hide the explorer, code and terminal" : "Ctrl+Shift+Z: leave code / terminal only"));
+      // Settings → Features → Shortcut hints.
+      .when((shared("zendr.features") ?? {}).hints !== false, e => e.child(h_flex().h(24).flex_none().px(14).gap(14).items_center().border_t(1).border_color(t.border).text_size(10).text_color(t.dim).overflow_hidden()
+        .child("N / F7: next change").child("P: previous").child("C: changes only").child("E: files").child(this.part ? "Right-click a tab to show or hide parts" : "Ctrl+Shift+Z: back to split")));
   }
 }

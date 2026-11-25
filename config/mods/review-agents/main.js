@@ -6,7 +6,9 @@ import { agents, terminals, panes, focused, spaces, run, hc, theme, shared, setS
 
 // A session's colour (mods/session-color): its own, else its space's avatar colour.
 const SESSION_HEX = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
+const feature = (id) => (shared("zendr.features") ?? {})[id] !== false;
 function sessionColor(a) {
+  if (!feature("session_colors")) return null;
   const c = (shared("agent.colors") ?? {})[a.address] ?? (shared("space.colors") ?? {})[a.space];
   return c ? SESSION_HEX[c] ?? (c.startsWith("#") ? c : null) : null;
 }
@@ -428,7 +430,8 @@ export default class Agents extends View {
       // Without a space header above (priority, pinned) the row names its space.
       const full = byPriority || isPinned;
       const name = full ? a.space_name || label(a) : more ?? (/^\d+$/.test(label(a)) ? a.program?.name || label(a) : label(a));
-      const about = this.about(a, name);
+      // Settings → Features → What each agent is doing.
+      const about = feature("agent_summaries") ? this.about(a, name) : {};
       const tall = Boolean(about.title || about.summary);
       return h_flex()
         .id(`ag-${a.address}`)
@@ -450,7 +453,7 @@ export default class Agents extends View {
         .on_click(() => run("pane.focus", { pane: a.pane }))
         // Its colour on the left edge; right-click to change it.
         .when(Boolean(tint), el => el.border_l(3).border_color(tint))
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); pickColor(a, name); })
+        .when(feature("session_colors"), el => el.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); pickColor(a, name); }))
         .when(Boolean(pic), el => el.child(div().id(`agent-fold-${a.address}`)
           .when(subs.length > 0, el => el.on_click((_e, cx) => {
             cx.stop_propagation();
@@ -465,7 +468,7 @@ export default class Agents extends View {
           .when(Boolean(about.summary), el => el.child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(about.summary))))
         .when(Boolean(machine), el => el.child(div().text_size(10).text_color(t.dim).child(machine)))
         .when(subs.length > 0, el => el.child(fold(a, subs)))
-        .when(this.hovered === a.address, el => el.child(paint).child(pin))
+        .when(this.hovered === a.address, el => el.when(feature("session_colors"), el => el.child(paint)).child(pin))
         .when(this.hovered !== a.address && Boolean(when), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(duration(now - when))))
         .child(this.status(t, a, byPriority && !isPinned));
     };

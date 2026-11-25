@@ -166,13 +166,15 @@ export default class Spaces extends View {
 
   // The second line of a space's row, or null.
   meta(w, t, ps) {
-    const ports = this.ports[w.id] ?? [];
-    const pr = this.prs[where(w, ps)];
+    // Settings → Features → Space details: ports, pull request and bridge status.
+    const details = (shared("zendr.features") ?? {}).space_details !== false;
+    const ports = details ? this.ports[w.id] ?? [] : [];
+    const pr = details ? this.prs[where(w, ps)] : null;
     const note = (shared("notify.prefs") ?? {}).sidebar_note === false ? null : (shared("inbox.log") ?? []).find(e => !e.read && e.space === w.id);
     let bridge = null;
     for (const term of terminals()) {
       const l = term.labels ?? {};
-      if (l["herdr.space"] === w.id && l["bridge.status"]) { try { bridge = JSON.parse(l["bridge.status"]).text ?? null; } catch { bridge = l["bridge.status"]; } break; }
+      if (details && l["herdr.space"] === w.id && l["bridge.status"]) { try { bridge = JSON.parse(l["bridge.status"]).text ?? null; } catch { bridge = l["bridge.status"]; } break; }
     }
     if (!ports.length && !pr && !note && !bridge) return null;
     const prColor = pr ? (pr.isDraft ? t.dim : pr.state === "MERGED" ? t.ansi5 : pr.state === "CLOSED" ? t.ansi1 : t.ansi2) : null;

@@ -7,9 +7,11 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { run, props, closeOverlay, openOverlay, theme, keys, terminals, spaces, panes, exec, layout } from "herdr";
+import { run, props, closeOverlay, openOverlay, theme, keys, terminals, spaces, panes, exec, layout, shared } from "herdr";
 
 // A tab's session: its agent's terminal, else its first.
+// Settings → Features.
+const features = () => shared("zendr.features") ?? {};
 const leadTerminal = (tab) => (panes().find((p) => p.tab === tab && p.program?.agent) ?? panes().find((p) => p.tab === tab && p.terminal))?.terminal;
 
 function findNode(node, id) {
@@ -27,7 +29,7 @@ function viewItems() {
     ? [`Show ${name}`, "layout.show", { id }]
     : shown > 1 ? [`Hide ${name}`, "layout.hide", { id }] : null).filter(Boolean)
     // The hub sits beside the work, so it can always go.
-    .concat(findNode(root, "hub") ? [[findNode(root, "hub").hidden ? "Show hub" : "Hide hub", findNode(root, "hub").hidden ? "layout.show" : "layout.hide", { id: "hub" }]] : []);
+    .concat(findNode(root, "hub") && features().hub !== false ? [[findNode(root, "hub").hidden ? "Show hub" : "Hide hub", findNode(root, "hub").hidden ? "layout.show" : "layout.hide", { id: "hub" }]] : []);
 }
 
 // Where a space is now: its first terminal's live folder, else where it was made.
@@ -82,14 +84,14 @@ function items(p, git) {
       return [
         ...viewItems(),
         ["Rename", "tab.rename", { id: tg.id }],
-        ...(leadTerminal(tg.id) ? [["Colour…", "color", { kind: "agent", id: leadTerminal(tg.id), name: spaces().flatMap((s) => s.tabs).find((c) => c.id === tg.id)?.name }]] : []),
+        ...(leadTerminal(tg.id) && features().session_colors !== false ? [["Colour…", "color", { kind: "agent", id: leadTerminal(tg.id), name: spaces().flatMap((s) => s.tabs).find((c) => c.id === tg.id)?.name }]] : []),
         ["New tab", "tab.new", { space: tg.space }],
         ["Close", "tab.close", { id: tg.id }],
       ];
     case "space":
       return [
         ["Rename", "space.rename", { id: tg.id }],
-        ["Colour…", "color", { kind: "space", id: tg.id, name: spaces().find((s) => s.id === tg.id)?.name }],
+        ...(features().session_colors === false ? [] : [["Colour…", "color", { kind: "space", id: tg.id, name: spaces().find((s) => s.id === tg.id)?.name }]]),
         ...(git ? [["New worktree", "worktree", { space: tg.id, action: "new" }], ["Open worktree", "worktree", { space: tg.id, action: "open" }]] : []),
         ...(git === "linked" ? [["Remove worktree", "worktree", { space: tg.id, action: "remove" }]] : []),
         ["Close", "space.close", { id: tg.id }],
