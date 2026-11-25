@@ -32,6 +32,17 @@ function jumpUnread() {
 // Settings → Features (settings.json `features`): each on unless turned off.
 const feature = (id) => (shared("zendr.features") ?? {})[id] !== false;
 
+// Command search and Ask AI (mods/commands), for the focused terminal.
+function openCommands(mode) {
+  if (!feature(mode === "ai" ? "ai_command" : "command_search")) return;
+  const f = focused(), pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
+  const tab = spaces().flatMap(s => s.tabs).find(c => c.id === f?.tab);
+  const name = pane?.program?.name ?? "";
+  const shell = /pwsh|powershell/i.test(name) ? "PowerShell" : /cmd/i.test(name) ? "cmd.exe" : /bash|zsh|fish|\bsh\b/i.test(name) ? name : null;
+  openOverlay({ mod: "commands", kind: "dialog", width: 640, height: 480,
+    props: { mode, terminal: f?.terminal ?? null, cwd: f?.cwd ?? null, shell, where: tab ? label(tab, pane) : null } });
+}
+
 // Colour the focused session (mods/session-color).
 function pickFocusedColor() {
   const f = focused(), address = f?.agent ?? f?.terminal;
@@ -82,6 +93,9 @@ export default class Tabs extends View {
         if (command === "inbox") openInbox();
         else if (command === "jump-unread") jumpUnread();
         else if (command === "color") pickFocusedColor();
+        else if (command === "command-search") openCommands("history");
+        else if (command === "ask-ai") openCommands("ai");
+        else if (command === "launch") { if (feature("launch_configs")) openOverlay({ mod: "launch", kind: "dialog", width: 520, height: 460 }); }
         cx.notify();
       }
     });
@@ -334,6 +348,8 @@ export default class Tabs extends View {
         .on_size_change((_size, cx) => { if (active >= 0) { this.scroll.scroll_to_item(active); cx.notify(); } })
         .children(shown.map(item)))
       .child(button("tab-new", svg("mods/workspace-chrome/plus.svg").size(14), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), "New tab or terminal"))
+      .when(feature("command_search") || feature("ai_command"), el => el.child(button("command-search", svg("mods/commands/workflow.svg").size(14),
+        () => openCommands(feature("command_search") ? "history" : "ai"), "Command search: history, workflows and Ask AI (Ctrl+Shift+R)")))
       .when(feature("bell"), el => el.child(div().id("inbox-bell").relative().flex_none()
         .tooltip(unread ? `Notifications: ${unread} unread (Ctrl+Shift+I)` : "Notifications (Ctrl+Shift+I)")
         .child(button("inbox", svg("mods/review-tabs/bell.svg").size(14), openInbox))

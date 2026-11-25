@@ -1,0 +1,7 @@
+{
+  "place": "none",
+  "title": "Launch configurations",
+  "palette": [
+    { "title": "Launch configurations: save or open a setup", "command": "review-tabs.launch", "args": {}, "words": "warp launch configuration setup restore spaces tabs" }
+  ]
+}

@@ -2,6 +2,9 @@
   "global": {
     "ctrl-shift-i": "review-tabs.inbox",
     "ctrl-shift-u": "review-tabs.jump-unread",
-    "ctrl-shift-y": "review-tabs.color"
+    "ctrl-shift-y": "review-tabs.color",
+    "ctrl-shift-r": "review-tabs.command-search",
+    "ctrl-shift-space": "review-tabs.ask-ai",
+    "ctrl-shift-j": "review-tabs.launch"
   }
 }

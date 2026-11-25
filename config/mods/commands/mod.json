@@ -1,0 +1,8 @@
+{
+  "place": "none",
+  "title": "Command search",
+  "palette": [
+    { "title": "Command search: history and workflows", "command": "review-tabs.command-search", "args": {}, "words": "warp history workflow ctrl+r find command" },
+    { "title": "Ask AI for a command", "command": "review-tabs.ask-ai", "args": {}, "words": "warp ai claude natural language command" }
+  ]
+}
