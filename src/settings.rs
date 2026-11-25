@@ -370,6 +370,9 @@ pub struct Person {
     /// How big the whole app is drawn (1 = as designed). The zoom keys change it.
     pub zoom: f32,
     pub sounds: Sounds,
+    /// Settings → Notifications.
+    #[serde(skip_serializing_if = "Notifications::is_empty")]
+    pub notifications: Notifications,
     /// The herdr-core to use, when it isn't where Herdr looks (core_bin.rs).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub core: Option<String>,
@@ -462,6 +465,7 @@ impl Default for Person {
         Person {
             zoom: 1.0,
             sounds: Sounds::default(),
+            notifications: Notifications::default(),
             core: None,
             font: None,
             font_size: None,
@@ -540,6 +544,48 @@ pub struct Sounds {
     pub done: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked: Option<String>,
+}
+
+/// Notification preferences (settings.json `notifications`). The app reads how long a
+/// toast stays (`toast_seconds`, 0: until clicked), do not disturb (`quiet_until`, ms
+/// since 1970: no sounds until then), and whether each kind plays its sound
+/// (`blocked.sound`, `done.sound`). The rest (pop-ups, the inbox, the bell) is the
+/// notification mods', kept as written.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Notifications {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub toast_seconds: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quiet_until: Option<u64>,
+    #[serde(flatten)]
+    pub rest: serde_json::Map<String, serde_json::Value>,
+}
+
+impl Notifications {
+    fn is_empty(&self) -> bool {
+        self.toast_seconds.is_none() && self.quiet_until.is_none() && self.rest.is_empty()
+    }
+
+    /// Do not disturb is on.
+    pub fn quiet(&self) -> bool {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+        self.quiet_until.is_some_and(|until| until > now)
+    }
+
+    /// Whether `kind` (`blocked` or `done`) plays its sound.
+    pub fn sound(&self, kind: &str) -> bool {
+        self.rest.get(kind).and_then(|k| k.get("sound")).and_then(serde_json::Value::as_bool).unwrap_or(true)
+    }
+
+    /// How long a toast stays, in ms: None until it's clicked.
+    pub fn toast_ms(&self, level: Option<&str>) -> Option<f64> {
+        match self.toast_seconds {
+            Some(s) if s <= 0.0 => None,
+            Some(s) => Some(s * 1000.0 * if matches!(level, Some("error" | "warning")) { 1.5 } else { 1.0 }),
+            None => Some(if matches!(level, Some("error" | "warning")) { 8000.0 } else { 5000.0 }),
+        }
+    }
 }
 
 impl Default for Sounds {
