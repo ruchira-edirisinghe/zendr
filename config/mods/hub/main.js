@@ -158,7 +158,7 @@ export default class Hub extends View {
     const byTerminal = new Map(this.peers.filter(p => p.zendr?.terminal).map(p => [p.zendr.terminal, p]));
     const rows = list.map(a => {
       const peer = byTerminal.get(a.address);
-      return { key: a.address, address: a.address, peer, tint: sessionColor(a.address, a.space), name: peer?.name ?? a.space_name ?? a.title, role: peer?.role,
+      return { key: a.address, address: a.address, peer, tint: sessionColor(a.address, a.space), focused: a.focused, name: peer?.name ?? a.space_name ?? a.title, role: peer?.role,
         space: a.space_name, status: a.status, title: (a.title ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").trim(),
         summary: summaries[a.address] ?? null, app: a.program?.name };
     });
@@ -180,7 +180,9 @@ export default class Hub extends View {
     return v_flex().id(`hub-${r.key}`).w_full().flex_none().p(10).gap(4).rounded(9).border_1()
       .border_color(lead ? t.accent : r.status === "blocked" ? t.blocked : selected ? t.accent + "88" : t.border)
       .bg(lead ? t.accent + "12" : t.raised).cursor_pointer().hover(s => s.bg(t.hover))
-      .when(Boolean(r.tint), el => el.border_l(4).border_color(r.tint))
+      // The session's colour tints the whole card; the one you're in is stronger and outlined.
+      .when(Boolean(r.tint), el => el.bg(r.tint + (r.focused ? "42" : "1c")).hover(s => s.bg(r.tint + (r.focused ? "4d" : "2e")))
+        .when(Boolean(r.focused), el => el.border_color(r.tint + "cc")))
       .when(Boolean(r.address), el => el.on_mouse_down("right", (_e, cx) => { cx.stop_propagation();
         openOverlay({ mod: "session-color", kind: "popup", width: 268, props: { kind: "agent", id: r.address, name: r.name } }); }))
       .tooltip(r.address ? "Show this agent's terminal" : "Runs outside Zendr")

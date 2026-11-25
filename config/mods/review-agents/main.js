@@ -442,17 +442,19 @@ export default class Agents extends View {
         .rounded(8)
         .items_center()
         .gap(9)
-        .when(a.focused, (el) => el.bg(t.selected))
+        .when(a.focused && !tint, (el) => el.bg(t.selected))
         .cursor_pointer()
-        .hover((s) => s.bg(t.hover))
+        .when(!tint, el => el.hover((s) => s.bg(t.hover)))
+        // Its colour tints the whole row; the selected one is stronger and outlined. Right-click to change it.
+        .when(Boolean(tint), el => el.border_1()
+          .bg(tint + (a.focused ? "42" : "1c")).border_color(a.focused ? tint + "cc" : "#00000000")
+          .hover((s) => s.bg(tint + (a.focused ? "4d" : "2e"))))
         .on_hover((on, cx) => {
           if (on) this.hovered = a.address;
           else if (this.hovered === a.address) this.hovered = null;
           cx.notify();
         })
         .on_click(() => run("pane.focus", { pane: a.pane }))
-        // Its colour on the left edge; right-click to change it.
-        .when(Boolean(tint), el => el.border_l(3).border_color(tint))
         .when(feature("session_colors"), el => el.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); pickColor(a, name); }))
         .when(Boolean(pic), el => el.child(div().id(`agent-fold-${a.address}`)
           .when(subs.length > 0, el => el.on_click((_e, cx) => {

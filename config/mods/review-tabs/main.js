@@ -304,7 +304,10 @@ export default class Tabs extends View {
         .when(i <= active, el => el.on_size_change((_size, cx) => { this.scroll.scroll_to_item(active); cx.notify(); }))
         // A tab whose agent needs you lights up in the attention colour, as in cmux.
         .border(1).border_color(c.status === "blocked" ? t.blocked : c.active ? t.border : t.chrome).bg(c.active ? t.raised : t.chrome).text_color(c.active ? t.foreground : t.muted)
-        .hover(s => s.bg(t.hover))
+        .when(!tint, el => el.hover(s => s.bg(t.hover)))
+        // The session's colour tints the whole tab; the selected one is stronger and outlined.
+        .when(Boolean(tint), el => el.bg(tint + (c.active ? "42" : "1c")).hover(s => s.bg(tint + (c.active ? "4d" : "2e")))
+          .when(c.active && c.status !== "blocked", el => el.border_color(tint + "cc")))
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_up("left", () => {
           const from = this.pressed; this.pressed = null;
@@ -312,8 +315,6 @@ export default class Tabs extends View {
           else run("tab.select", { id: c.id });
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "review-menu", kind: "popup", width: 220, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
-        // The session's colour (right-click → Colour…).
-        .when(Boolean(tint), el => el.child(div().w(3).h(14).flex_none().rounded(2).bg(tint)))
         .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(14).text_color(t.muted) : image(program.icon).size(14)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
         .when(c.status === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
