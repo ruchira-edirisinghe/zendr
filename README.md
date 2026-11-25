@@ -11,7 +11,7 @@ Zendr is made from the code of **[Herdr](https://herdr.dev)** ([herdrdev](https:
 **From Herdr.** Spaces, tabs and split panes; terminals that survive closing or updating the app; agent status for Claude Code, Codex and others; other machines over SSH; a command palette; themes; and mods, which are small JavaScript files that can change any part of the UI.
 
 **Code reviewer.** A space opens with three blocks: a VS Code-style file explorer on the left, the code reviewer in the middle, and the terminal on the right.
-- The code reviewer shows each file whole, with changes inline. Lines are numbered both as they were in the last commit and as they are now.
+- The code reviewer shows each file whole, with changes inline. Lines are numbered as they are now; removed lines show in red without a number.
 - It has syntax highlighting and a change ruler. `n`/`p` (or F7) jump between changes.
 - It can show only the changed parts, or open the file in VS Code at that line.
 - Right-click a tab to show or hide any of the three blocks. Each space remembers its choice.

@@ -666,7 +666,7 @@ export default class ReviewFile extends View {
       : div().flex_1().min_w(0).whitespace_nowrap().child(r.text || " ");
     return h_flex().w_full().h(rh).flex_none().when(Boolean(tint), e => e.bg(tint + "1c"))
       .child(div().w(3).h_full().flex_none().when(Boolean(tint), e => e.bg(tint)))
-      .child(div().w(this.gutter(size)).flex_none().text_right().text_color(removed ? t.ansi1 : t.dim).child(r.old === undefined ? "" : String(r.old)))
+      // One column: the line's number in the file as it is now. A removed line has none (its "−" and colour say so).
       .child(div().w(this.gutter(size)).flex_none().text_right().text_color(added ? t.ansi2 : t.dim).child(r.new === undefined ? "" : String(r.new)))
       .child(div().w(22).flex_none().text_center().text_color(tint ?? t.dim).child(added ? "+" : removed ? "−" : ""))
       .child(code);
@@ -807,7 +807,7 @@ export default class ReviewFile extends View {
         .when(explorer, e => e.child(this.explorerPane(t)))
         .child(div().flex_1().min_w(0).h_full().relative().font_family(s.font_family ?? "JetBrains Mono").text_size(size)
           .child(div().id("review-x").size_full().overflow_x_scrollbar()
-            .child(div().w_full().min_w(Math.max(300, this.longest * charWidth(size) + 2 * this.gutter(size) + 60)).h_full()
+            .child(div().w_full().min_w(Math.max(300, this.longest * charWidth(size) + this.gutter(size) + 60)).h_full()
               .child(v_virtual_list("review-rows", this.view.length, rowHeight(size), (i) => String(i),
                 (range) => this.view.slice(range.start, range.end).map(r => this.row(r, t, size))).track_scroll(this.scroll).size_full())))
           .child(Scrollbar.vertical("review-rows").viewport_from_layout().absolute().inset_0())
