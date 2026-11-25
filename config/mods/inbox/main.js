@@ -1,10 +1,9 @@
-// Notifications, like cmux's panel: every time an agent needed you or finished, every
-// session-bridge message and every other toast, newest first, grouped by day. Filter by
-// kind, go to one (click or Enter), remove one, or pause them all (do not disturb).
-// The log is shared("inbox.log"), written by review-tabs (agents, the bridge) and
-// review-toast (other toasts). Preferences: Settings → Notifications (settings.json
-// `notifications`, read for everyone by review-tabs into shared("notify.prefs")).
-// Opened as a popup: openOverlay({ mod: "inbox", kind: "popup", ... }).
+// Notifications, as a drawer on the right (the layout's "side" stack, beside the hub).
+// What needs you is pinned on top as cards with Go to it / Dismiss; everything else is a
+// quiet timeline below, by day. The log is shared("inbox.log"), written by review-tabs
+// (agents, the session bridge) and review-toast (other toasts). Preferences: Settings →
+// Notifications (shared("notify.prefs")). Opened by the toolbar's Notifications toggle
+// (Ctrl+Shift+I); without a "side" drawer in the layout it opens as a popup instead.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { props, closeOverlay, run, theme, shared, setShared, appHome, readTextFile, writeTextFile } from "herdr";
@@ -19,7 +18,6 @@ const KINDS = {
   warning: { label: "Warning", icon: "alert", color: "working" },
   other: { label: "Notice", icon: "info", color: "accent" },
 };
-const FILTERS = [["all", "All"], ["unread", "Unread"], ["blocked", "Needs you"], ["done", "Finished"], ["bridge", "Messages"]];
 const FOREVER = 9e12;
 
 export function kindOf(e) {
@@ -33,19 +31,31 @@ export function kindOf(e) {
 
 function ago(at) {
   const s = Math.max(0, Math.round((Date.now() - at) / 1000));
-  return s < 60 ? "now" : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : `${Math.floor(s / 86400)}d ago`;
+  return s < 60 ? "now" : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86400)}d`;
 }
 const clock = (ms) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; };
 function day(at) {
   const d = new Date(at), today = new Date();
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  return at >= start ? "Today" : at >= start - 86400000 ? "Yesterday" : `${d.getDate()} ${"Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ")[d.getMonth()]}`;
+  return at >= start ? "Earlier today" : at >= start - 86400000 ? "Yesterday" : `${d.getDate()} ${"Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ")[d.getMonth()]}`;
 }
+
+// What a notification says, in one line, and who it's from.
+function headline(e) {
+  if (e.kind !== "agent") return e.title || "Notification";
+  const said = e.body && e.body.toLowerCase() !== (e.app ?? "").toLowerCase() && !/^(claude|codex|gemini|opencode|amp)$/i.test(e.body) ? e.body : null;
+  return said ?? `${e.space_name ?? "An agent"} ${kindOf(e) === "blocked" ? "needs you" : "finished"}`;
+}
+const who = (e) => [e.space_name || (e.kind === "bridge" ? "Session bridge" : null), e.kind === "agent" ? e.app : null].filter(Boolean).join(" · ");
+const detail = (e) => (e.kind === "agent" ? null : e.body || null);
+const cut = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+const setLog = (fn) => setShared("inbox.log", fn(shared("inbox.log") ?? []));
 
 // Goes to where a notification came from and marks it read.
 export function open(entry) {
   if (!entry) return;
-  setShared("inbox.log", (shared("inbox.log") ?? []).map(e => e.id === entry.id ? { ...e, read: true } : e));
+  setLog((log) => log.map((e) => (e.id === entry.id ? { ...e, read: true } : e)));
   if (entry.terminal) {
     if (entry.space) run("space.select", { id: entry.space });
     if (entry.tab) run("tab.select", { id: entry.tab });
@@ -64,138 +74,123 @@ async function changeNotes(edit) {
     if (!person || typeof person !== "object" || Array.isArray(person)) return false;
     person.notifications = { ...(person.notifications ?? {}) };
     edit(person.notifications);
-    try { await writeTextFile(file, JSON.stringify(person, null, 2) + "\n", raw); setShared("notify.prefs.changed", Date.now()); return true; } catch {}
+    try { await writeTextFile(file, JSON.stringify(person, null, 2) + "\n", raw); return true; } catch {}
   }
   return false;
 }
 
 export default class Inbox extends View {
   init(_props, cx) {
-    this.at = 0;
-    try { this.filter = localStorage.getItem("filter") ?? "all"; } catch { this.filter = "all"; }
-    if (!FILTERS.some(([f]) => f === this.filter)) this.filter = "all";
     this.handle = cx.focus_handle();
-    this.handle.focus();
-    cx.timer.every(30000, cx => cx.notify()); // "5m ago" keeps moving.
+    if (props()?.overlay) this.handle.focus();
+    cx.timer.every(30000, (cx) => cx.notify()); // "5m" keeps moving.
   }
 
-  close() { closeOverlay(props()?.overlay); }
-
-  setFilter(f) { this.filter = f; this.at = 0; try { localStorage.setItem("filter", f); } catch {} }
-
-  remove(entry) { setShared("inbox.log", (shared("inbox.log") ?? []).filter(e => e.id !== entry.id)); }
-
-  shown(log) {
-    const f = this.filter;
-    return f === "all" ? log : f === "unread" ? log.filter(e => !e.read) : log.filter(e => kindOf(e) === f);
+  close() {
+    if (props()?.overlay) closeOverlay(props().overlay);
+    else run("layout.hide", { id: "side" });
   }
 
   iconButton(t, id, name, tip, fn) {
-    return div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted)
-      .cursor_pointer().hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip(tip)
+    return div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(7).text_color(t.muted)
+      .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)).tooltip(tip)
       .on_click((_e, cx) => { cx.stop_propagation(); fn(cx); cx.notify(); })
-      .child(svg(icon(name)).size(14));
+      .child(svg(icon(name)).size(15));
   }
 
-  textButton(t, id, name, label, tip, fn) {
-    return h_flex().id(id).h(26).px(8).gap(5).flex_none().items_center().rounded(6).text_size(11.5).text_color(t.muted)
-      .cursor_pointer().hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip(tip)
+  button(t, id, name, label, tip, fn, primary = false) {
+    return h_flex().id(id).h(30).px(11).gap(6).flex_none().items_center().justify_center().rounded(7).text_size(12).cursor_pointer().tooltip(tip)
+      .when(primary, (el) => el.bg(t.accent).text_color(t.accent_foreground).font_semibold().hover((s) => s.opacity(0.9)))
+      .when(!primary, (el) => el.bg(t.raised).border_1().border_color(t.border).text_color(t.foreground).hover((s) => s.bg(t.hover)))
       .on_click((_e, cx) => { cx.stop_propagation(); fn(cx); cx.notify(); })
-      .when(Boolean(name), el => el.child(svg(icon(name)).size(13)))
+      .when(Boolean(name), (el) => el.child(svg(icon(name)).size(13)))
       .child(label);
   }
 
-  row(t, e, i) {
-    const k = KINDS[kindOf(e)], color = t[k.color] ?? t.accent;
-    const who = e.space_name || (e.kind === "bridge" ? "Session bridge" : e.kind === "toast" ? null : "Agent");
-    // An agent's title is what it's doing; a bare program name says nothing, so say what happened.
-    const said = e.kind === "agent" && e.body && e.body.toLowerCase() !== (e.app ?? "").toLowerCase() && !/^(claude|codex|gemini|opencode|amp)$/i.test(e.body) ? e.body : null;
-    const headline = e.kind === "agent" ? said ?? `${e.space_name ?? "An agent"} ${kindOf(e) === "blocked" ? "needs you" : "finished"}` : e.title || "Notification";
-    const detail = e.kind === "agent" ? null : e.body;
+  // Something waiting on you: a card you act on.
+  card(t, e) {
+    const k = KINDS[kindOf(e)], color = t[k.color] ?? t.accent, more = detail(e);
+    return v_flex().id(`inbox-card-${e.id}`).w_full().flex_none().p(12).gap(8).rounded(10).bg(color + "14").border_1().border_color(color + "66")
+      .child(h_flex().gap(8).items_center()
+        .child(svg(icon(k.icon)).size(15).flex_none().text_color(color))
+        .child(div().flex_none().text_size(11).font_semibold().text_color(color).child(k.label.toUpperCase()))
+        .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.muted).child(who(e)))
+        .child(div().flex_none().text_size(11).text_color(t.dim).child(ago(e.at))))
+      .child(div().text_size(13).line_height("18px").font_semibold().text_color(t.foreground).child(cut(headline(e), 160)))
+      .when(Boolean(more), (el) => el.child(div().text_size(12).line_height("17px").text_color(t.muted).child(cut(more, 200))))
+      .child(h_flex().gap(8)
+        .child(this.button(t, `inbox-go-${e.id}`, null, "Go to it", "Show where this came from", () => open(e), true))
+        .child(this.button(t, `inbox-dismiss-${e.id}`, null, "Dismiss", "Mark it read and move it down", () => setLog((log) => log.map((x) => (x.id === e.id ? { ...x, read: true } : x))))));
+  }
+
+  // Everything else: one quiet line each.
+  line(t, e) {
+    const k = KINDS[kindOf(e)], color = t[k.color] ?? t.accent, from = who(e);
     return h_flex().id(`inbox-${e.id}`).w_full().flex_none().px(10).py(8).gap(10).items_start().rounded(8).cursor_pointer()
-      .when(i === this.at, el => el.bg(t.selected)).hover(s => s.bg(t.hover))
-      .on_click(() => { open(e); this.close(); })
-      .child(div().relative().mt(1).size(28).flex_none().flex().items_center().justify_center().rounded(14).bg(color + (e.read ? "14" : "26"))
-        .child(svg(icon(k.icon)).size(15).text_color(e.read ? t.dim : color))
-        .when(!e.read, el => el.child(div().absolute().top(-1).right(-1).size(9).rounded(5).bg(t.accent).border_2().border_color(t.popover))))
-      .child(v_flex().flex_1().min_w(0).gap(2)
-        .child(h_flex().gap(6).items_center()
-          .child(div().flex_none().text_size(10.5).font_semibold().text_color(e.read ? t.dim : color).child(k.label.toUpperCase()))
-          .when(Boolean(who), el => el.child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(`· ${who}`)))
-          .child(div().flex_1())
-          .child(div().flex_none().text_size(10.5).text_color(t.dim).child(ago(e.at))))
-        .child(div().text_size(12.5).line_height("17px").text_color(e.read ? t.muted : t.foreground).when(!e.read, el => el.font_semibold())
-          .child(headline.length > 140 ? headline.slice(0, 139) + "…" : headline))
-        .when(Boolean(detail), el => el.child(div().text_size(11.5).line_height("16px").text_color(t.muted).child(detail.length > 160 ? detail.slice(0, 159) + "…" : detail))))
-      .child(this.iconButton(t, `inbox-x-${e.id}`, "x", "Remove this notification", () => this.remove(e)));
+      .hover((s) => s.bg(t.hover)).tooltip(`${k.label}. Click to go there.`)
+      .on_click(() => open(e))
+      .child(div().relative().mt(1).flex_none().child(svg(icon(k.icon)).size(15).text_color(e.read ? t.dim : color))
+        .when(!e.read, (el) => el.child(div().absolute().top(-2).right(-3).size(7).rounded(4).bg(t.accent))))
+      .child(v_flex().flex_1().min_w(0).gap(1)
+        .child(div().truncate().text_size(12.5).text_color(e.read ? t.muted : t.foreground).when(!e.read, (el) => el.font_semibold()).child(headline(e)))
+        .child(div().truncate().text_size(11).text_color(t.dim).child([k.label, from].filter(Boolean).join(" · "))))
+      .child(div().flex_none().text_size(11).text_color(t.dim).child(ago(e.at)))
+      .child(div().id(`inbox-x-${e.id}`).flex_none().size(20).flex().items_center().justify_center().rounded(5).text_color(t.dim)
+        .hover((s) => s.bg(t.raised).text_color(t.foreground)).tooltip("Remove")
+        .on_click((_e, cx) => { cx.stop_propagation(); setLog((log) => log.filter((x) => x.id !== e.id)); cx.notify(); })
+        .child(svg(icon("x")).size(12)));
+  }
+
+  section(t, label, count) {
+    return h_flex().px(4).pt(14).pb(6).gap(6).items_center().text_size(11).font_semibold().text_color(t.dim)
+      .child(label.toUpperCase()).when(count != null, (el) => el.child(div().text_color(t.dim).child(`(${count})`)));
   }
 
   render(cx) {
     const t = theme(), log = shared("inbox.log") ?? [], prefs = shared("notify.prefs") ?? {};
-    const unread = log.filter(e => !e.read).length;
-    const list = this.shown(log);
-    this.at = Math.min(this.at, Math.max(0, list.length - 1));
+    const unread = log.filter((e) => !e.read).length;
     const quiet = (prefs.quiet_until ?? 0) > Date.now();
-    const count = (f) => f === "all" ? log.length : f === "unread" ? unread : log.filter(e => kindOf(e) === f).length;
-
-    // Rows with a heading wherever the day changes.
-    const rows = [];
+    const waiting = log.filter((e) => !e.read && kindOf(e) === "blocked");
+    const rest = log.filter((e) => !waiting.includes(e));
+    const timeline = [];
     let last = null;
-    list.forEach((e, i) => {
+    for (const e of rest) {
       const d = day(e.at);
-      if (d !== last) { rows.push(div().px(10).pt(rows.length ? 10 : 4).pb(4).text_size(10.5).font_semibold().text_color(t.dim).child(d.toUpperCase())); last = d; }
-      rows.push(this.row(t, e, i));
-    });
+      if (d !== last) { timeline.push(this.section(t, d)); last = d; }
+      timeline.push(this.line(t, e));
+    }
 
-    return v_flex().id("inbox").track_focus(this.handle).size_full().min_h(0).bg(t.popover).text_color(t.foreground).text_size(12.5)
-      .on_key_down((e, cx) => {
-        if (e.key === "down") this.at = Math.min(list.length - 1, this.at + 1);
-        else if (e.key === "up") this.at = Math.max(0, this.at - 1);
-        else if (e.key === "enter") { open(list[this.at]); this.close(); }
-        else if (e.key === "delete" || e.key === "backspace") { if (list[this.at]) this.remove(list[this.at]); }
-        else if (e.key === "tab") { const i = FILTERS.findIndex(([f]) => f === this.filter); this.setFilter(FILTERS[(i + 1) % FILTERS.length][0]); }
-        else if (e.key === "escape") this.close();
-        else return;
-        cx.notify();
-      })
+    return v_flex().id("inbox").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(12.5)
+      .when(!props()?.overlay, (el) => el.border_l(1).border_color(t.border))
+      .on_key_down((e, cx) => { if (e.key === "escape") { this.close(); cx.stop_propagation(); } })
       // Header
-      .child(h_flex().h(44).flex_none().pl(14).pr(8).gap(8).items_center()
-        .child(svg(icon("bell")).size(15).text_color(t.muted))
-        .child(div().font_semibold().text_size(13.5).child("Notifications"))
-        .when(unread > 0, e => e.child(div().px(6).h(18).flex().items_center().rounded(9).bg(t.accent).text_size(10.5).font_semibold().text_color(t.accent_foreground).child(`${unread} new`)))
+      .child(h_flex().h(46).flex_none().pl(14).pr(8).gap(8).items_center().border_b(1).border_color(t.border)
+        .child(svg(icon("bell")).size(16).text_color(t.muted))
+        .child(div().font_semibold().text_size(14).child("Notifications"))
+        .when(unread > 0, (el) => el.child(div().px(7).h(18).flex().items_center().rounded(9).bg(t.accent).text_size(10.5).font_semibold().text_color(t.accent_foreground).child(`${unread} new`)))
         .child(div().flex_1())
-        .when(unread > 0, el => el.child(this.textButton(t, "inbox-read", "read", "Mark all read", "Mark every notification read", () => setShared("inbox.log", log.map(e => ({ ...e, read: true }))))))
-        .child(this.iconButton(t, "inbox-clear", "trash", "Clear all notifications", () => setShared("inbox.log", [])))
-        .child(this.iconButton(t, "inbox-settings", "settings", "Notification settings", () => { run("app.settings", { section: "alerts" }); this.close(); })))
-      // Filters
-      .child(h_flex().flex_none().px(10).pb(8).gap(4).flex_wrap().border_b(1).border_color(t.border)
-        .children(FILTERS.map(([f, label]) => {
-          const on = this.filter === f, n = count(f);
-          return h_flex().id(`inbox-f-${f}`).h(24).px(8).gap(5).items_center().rounded(12).text_size(11.5).cursor_pointer()
-            .bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted).border_1().border_color(on ? t.accent + "88" : t.border)
-            .hover(s => s.text_color(t.foreground))
-            .on_click((_e, cx) => { this.setFilter(f); cx.notify(); })
-            .child(label)
-            .when(n > 0, el => el.child(div().text_size(10.5).text_color(t.dim).child(String(n))));
-        })))
+        .child(this.iconButton(t, "inbox-settings", "settings", "Notification settings", () => run("app.settings", { section: "alerts" })))
+        .child(this.iconButton(t, "inbox-close", "x", "Close (Esc)", () => this.close())))
       // Do not disturb
-      .when(quiet, el => el.child(h_flex().flex_none().px(14).py(7).gap(8).items_center().bg(t.working + "18").border_b(1).border_color(t.border)
-        .child(svg(icon("moon")).size(13).text_color(t.working))
-        .child(div().flex_1().min_w(0).text_size(11.5).text_color(t.foreground)
-          .child(prefs.quiet_until >= FOREVER ? "Do not disturb is on" : `Do not disturb until ${clock(prefs.quiet_until)}`))
-        .child(this.textButton(t, "inbox-dnd-off", null, "Turn off", "Show pop-ups and play sounds again", () => changeNotes(x => { delete x.quiet_until; delete x.quiet_mode; })))))
-      // List
-      .child(v_flex().id("inbox-list").flex_1().min_h(0).overflow_y_scroll().p(6)
-        .children(rows)
-        .when(!list.length, e => e.child(v_flex().p(24).gap(6).items_center()
-          .child(svg(icon(this.filter === "all" ? "bell" : "done")).size(22).text_color(t.dim))
-          .child(div().text_color(t.muted).child(this.filter === "all" ? "No notifications yet" : "Nothing here"))
-          .child(div().text_size(11.5).text_color(t.dim).child(this.filter === "all" ? "Agents that finish or need you show up here." : "Try another filter.")))))
+      .when(quiet, (el) => el.child(h_flex().flex_none().px(14).py(8).gap(8).items_center().bg(t.working + "18").border_b(1).border_color(t.border)
+        .child(svg(icon("moon")).size(14).text_color(t.working))
+        .child(div().flex_1().min_w(0).text_size(12).child(prefs.quiet_until >= FOREVER ? "Do not disturb is on" : `Do not disturb until ${clock(prefs.quiet_until)}`))
+        .child(this.button(t, "inbox-dnd-off", null, "Turn off", "Show pop-ups and play sounds again", () => changeNotes((x) => { delete x.quiet_until; delete x.quiet_mode; })))))
+      // Body
+      .child(v_flex().id("inbox-list").flex_1().min_h(0).overflow_y_scroll().px(10).pb(12)
+        .when(waiting.length > 0, (el) => el.child(this.section(t, "Needs you", waiting.length))
+          .child(v_flex().gap(8).children(waiting.map((e) => this.card(t, e)))))
+        .children(timeline)
+        .when(!log.length, (el) => el.child(v_flex().pt(48).px(20).gap(8).items_center()
+          .child(svg(icon("bell")).size(26).text_color(t.dim))
+          .child(div().font_semibold().text_color(t.muted).child("You're all caught up"))
+          .child(div().text_size(12).text_color(t.dim).text_center().child("When an agent needs you or finishes, it shows up here.")))))
       // Footer
-      .child(h_flex().h(34).flex_none().px(8).gap(6).items_center().border_t(1).border_color(t.border).text_size(10.5).text_color(t.dim)
-        .when(!quiet, el => el.child(this.textButton(t, "inbox-dnd", "moon", "Pause 1 hour", "Do not disturb: hold pop-ups and sounds for an hour",
-          () => changeNotes(x => { x.quiet_until = Date.now() + 3600000; x.quiet_mode = "hour"; }))))
+      .child(h_flex().flex_none().p(10).gap(8).items_center().border_t(1).border_color(t.border)
+        .child(this.button(t, "inbox-read", "read", "Mark all read", "Mark every notification read", () => setLog((l) => l.map((e) => ({ ...e, read: true })))))
+        .when(!quiet, (el) => el.child(this.button(t, "inbox-dnd", "moon", "Pause 1h", "Do not disturb: hold pop-ups and sounds for an hour",
+          () => changeNotes((x) => { x.quiet_until = Date.now() + 3600000; x.quiet_mode = "hour"; }))))
         .child(div().flex_1())
-        .child(div().pr(6).child("↑↓ Enter · Del removes · Tab filters")));
+        .child(this.iconButton(t, "inbox-clear", "trash", "Clear all notifications", () => setLog(() => []))));
   }
 }
