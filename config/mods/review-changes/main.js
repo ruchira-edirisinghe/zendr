@@ -2,7 +2,7 @@
 // Apache-2.0), modified to open a file in the review-file code view (the row's icon, a
 // double-click, "Open full file" beside the terminal or "In tab"), and to keep listing the
 // space's repo while a code view has the focus.
-import { View, div } from "gpui-kit";
+import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, run, setShared, layout } from "herdr";
 
@@ -353,7 +353,8 @@ export default class Changes extends View {
           .child(h_flex().flex_1().min_w(0).child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : "")).child(div().max_w(260).min_w(0).truncate().child(name)))
           .when(f.add > 0, (e) => e.child(div().text_size(11).text_color(t.ansi2).child(`+${f.add}`))).when(f.del > 0, (e) => e.child(div().text_size(11).text_color(t.ansi1).child(`−${f.del}`)))
           .child(div().id(`full-${f.path}`).w(18).h(18).flex().flex_none().items_center().justify_center().rounded(4).text_size(12).text_color(t.dim).cursor_pointer()
-            .hover((s) => s.bg(t.raised).text_color(t.foreground)).on_click((_e, cx) => { cx.stop_propagation(); this.openFull(f.path); }).child("⤢"));
+            .hover((s) => s.bg(t.raised).text_color(t.foreground)).tooltip("Open the whole file (or double-click)").on_click((_e, cx) => { cx.stop_propagation(); this.openFull(f.path); })
+            .child(svg("mods/review-changes/maximize.svg").size(12)));
       })).when(!this.files.length, (e) => e.child(div().p(8).text_color(t.dim).child(this.error || (this.loading ? "Loading changes…" : this.root ? "No uncommitted changes" : "No folder")))))
         .child(Scrollbar.vertical("changes-list").absolute().inset_0()))
       .when(this.limited, el => el.child(div().px(12).py(4).text_size(11).text_color(t.dim).child("Showing the first 1,000 changed files")))

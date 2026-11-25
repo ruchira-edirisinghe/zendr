@@ -686,23 +686,26 @@ export default class ReviewFile extends View {
     });
   }
 
-  button(t, id, label, action, enabled = true, active = false) {
-    return div().id(id).h(26).px(9).flex().flex_none().items_center().rounded(6).border_1().border_color(active ? t.accent : t.border).text_size(11)
-      .when(active, e => e.bg(t.selected))
-      .text_color(enabled ? t.foreground : t.dim).when(enabled, e => e.cursor_pointer().hover(s => s.bg(t.hover)).on_click((_e, cx) => action(cx))).child(label);
+  // A button: an icon (mods/... svg) and/or words, and a tooltip saying what it does.
+  button(t, id, label, action, enabled = true, active = false, { icon, tip } = {}) {
+    return div().id(id).h(26).px(label ? 9 : 6).gap(5).flex().flex_none().items_center().rounded(6).border_1().border_color(active ? t.accent : t.border).text_size(11)
+      .when(active, e => e.bg(t.selected)).when(Boolean(tip), e => e.tooltip(tip))
+      .text_color(enabled ? t.foreground : t.dim).when(enabled, e => e.cursor_pointer().hover(s => s.bg(t.hover)).on_click((_e, cx) => action(cx)))
+      .when(Boolean(icon), e => e.child(svg(icon).size(13))).when(Boolean(label), e => e.child(label));
   }
 
   // One of Split / Code / Terminal, like a segmented control.
   modes(t) {
     const mode = this.mode();
-    const segment = (id, label, value, action) => div().id(id).h_full().px(9).flex().items_center().cursor_pointer()
-      .when(mode === value, e => e.bg(t.selected).text_color(t.foreground)).hover(s => s.bg(t.hover)).on_click((_e, cx) => action(cx)).child(label);
+    const segment = (id, label, value, action, icon, tip) => div().id(id).h_full().px(9).gap(5).flex().items_center().cursor_pointer().tooltip(tip)
+      .when(mode === value, e => e.bg(t.selected).text_color(t.foreground)).hover(s => s.bg(t.hover)).on_click((_e, cx) => action(cx))
+      .child(svg(icon).size(12)).child(label);
     return h_flex().h(26).flex_none().rounded(6).overflow_hidden().border_1().border_color(t.border).text_size(11).text_color(t.muted)
-      .child(segment("mode-split", "◫ Split", "split", cx => this.showSplit(cx)))
+      .child(segment("mode-split", "Split", "split", cx => this.showSplit(cx), "mods/workspace-chrome/panel-right.svg", "Code beside the terminal"))
       .child(div().w(1).h_full().bg(t.border))
-      .child(segment("mode-code", "Code", "code", cx => this.showCode(cx)))
+      .child(segment("mode-code", "Code", "code", cx => this.showCode(cx), "mods/workspace-chrome/file-text.svg", "Only the code"))
       .child(div().w(1).h_full().bg(t.border))
-      .child(segment("mode-terminal", "Terminal", "terminal", cx => this.showTerminal(cx)));
+      .child(segment("mode-terminal", "Terminal", "terminal", cx => this.showTerminal(cx), "mods/workspace-chrome/terminal.svg", "Only the terminal"));
   }
 
   explorerPane(t, full = false) {
@@ -786,18 +789,18 @@ export default class ReviewFile extends View {
       })
       .child(h_flex().min_h(42).flex_none().flex_wrap().px(10).py(7).gap(6).items_center().border_b(1).border_color(t.border)
         .child(this.part
-          ? this.button(t, "review-explorer", "☰", () => run("layout.toggle", { id: "explorer" }), true, !findNode(layout(), "explorer")?.hidden)
-          : this.button(t, "review-explorer", "☰", cx => { this.toggleExplorer(); cx.notify(); }, true, explorer))
+          ? this.button(t, "review-explorer", "Files", () => run("layout.toggle", { id: "explorer" }), true, !findNode(layout(), "explorer")?.hidden, { icon: "mods/workspace-chrome/panel-left.svg", tip: "Show or hide the file explorer (E)" })
+          : this.button(t, "review-explorer", "Files", cx => { this.toggleExplorer(); cx.notify(); }, true, explorer, { icon: "mods/workspace-chrome/panel-left.svg", tip: "Show or hide the file explorer (E)" }))
         .when(Boolean(status), e => e.child(div().text_size(11).text_color(t[MARK[status]]).child(status)))
         .child(h_flex().flex_1().min_w(140).overflow_hidden().child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : "")).child(div().font_semibold().flex_none().child(name || "Pick a file in the Explorer")))
         .when(Boolean(path), e => e
           .child(div().flex_none().text_size(11).text_color(t.ansi2).child(`+${this.add}`)).child(div().flex_none().text_size(11).text_color(t.ansi1).child(`−${this.del}`))
           .child(div().flex_none().text_size(11).text_color(t.dim).child(hasChanges ? `${this.at >= 0 ? this.at + 1 : "–"}/${this.hunks.length}` : ""))
-          .child(this.button(t, "review-prev", "↑", cx => this.step(-1, cx), hasChanges))
-          .child(this.button(t, "review-next", "↓", cx => this.step(1, cx), hasChanges))
-          .child(this.button(t, "review-compact", this.compact ? "Full file" : "Changes only", cx => this.toggleCompact(cx), hasChanges)))
+          .child(this.button(t, "review-prev", null, cx => this.step(-1, cx), hasChanges, false, { icon: "mods/review-file/arrow-up.svg", tip: "Previous change (P or Shift+F7)" }))
+          .child(this.button(t, "review-next", null, cx => this.step(1, cx), hasChanges, false, { icon: "mods/review-file/arrow-down.svg", tip: "Next change (N or F7)" }))
+          .child(this.button(t, "review-compact", this.compact ? "Full file" : "Changes only", cx => this.toggleCompact(cx), hasChanges, false, { icon: this.compact ? "mods/workspace-chrome/file-text.svg" : "mods/review-file/list.svg", tip: this.compact ? "Show the whole file (C)" : "Show only the changed parts (C)" })))
         .child(this.modes(t))
-        .when(!this.on, e => e.child(this.button(t, "review-code", "VS Code", cx => this.openInCode(cx)))))
+        .when(!this.on, e => e.child(this.button(t, "review-code", "VS Code", cx => this.openInCode(cx), true, false, { icon: "mods/review-file/external.svg", tip: "Open this file in VS Code at this line" }))))
       .when(Boolean(this.error || this.note || this.toast), e => e.child(div().px(14).py(4).flex_none().text_size(11).border_b(1).border_color(t.border)
         .text_color(this.error || this.toast ? t.ansi1 : t.dim).child(this.error || this.toast || this.note)))
       .child(h_flex().flex_1().min_h(0).items_stretch()
@@ -810,7 +813,7 @@ export default class ReviewFile extends View {
           .child(Scrollbar.vertical("review-rows").viewport_from_layout().absolute().inset_0())
           .child(div().absolute().top(0).bottom(0).right(12).w(6).children(this.ruler(t)))
           .when(!this.view.length, e => e.child(div().absolute().top(8).px(14).text_color(t.dim)
-            .child(this.loading ? "Loading…" : path ? "" : this.root ? "Pick a file in the Explorer (☰) to view it" : "")))))
+            .child(this.loading ? "Loading…" : path ? "" : this.root ? "Pick a file in the Explorer (Files) to view it" : "")))))
       // Settings → Features → Shortcut hints.
       .when((shared("zendr.features") ?? {}).hints !== false, e => e.child(h_flex().h(24).flex_none().px(14).gap(14).items_center().border_t(1).border_color(t.border).text_size(10).text_color(t.dim).overflow_hidden()
         .child("N / F7: next change").child("P: previous").child("C: changes only").child("E: files").child(this.part ? "Right-click a tab to show or hide parts" : "Ctrl+Shift+Z: back to split")));
