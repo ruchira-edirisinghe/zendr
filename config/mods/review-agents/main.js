@@ -4,6 +4,14 @@ import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, hc, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout } from "herdr";
 
+// A session's colour (mods/session-color): its own, else its space's avatar colour.
+const SESSION_HEX = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
+function sessionColor(a) {
+  const c = (shared("agent.colors") ?? {})[a.address] ?? (shared("space.colors") ?? {})[a.space];
+  return c ? SESSION_HEX[c] ?? (c.startsWith("#") ? c : null) : null;
+}
+const pickColor = (a, name) => openOverlay({ mod: "session-color", kind: "popup", width: 268, props: { kind: "agent", id: a.address, name } });
+
 // Like cmux, each agent's row also says what it is doing (its title: Claude Code and
 // others put their current task in the terminal title) and a one-line summary of where
 // it is: its latest message or the step it is on, read from its screen when it changes,
@@ -404,6 +412,18 @@ export default class Agents extends View {
           cx.notify();
         })
         .child(svg(`mods/workspace-chrome/${isPinned ? "pin-off" : "pin"}.svg`).size(13));
+      const paint = div()
+        .id(`paint-${a.address}`)
+        .flex_none()
+        .p(2)
+        .rounded(4)
+        .text_color(t.dim)
+        .cursor_pointer()
+        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .tooltip("Colour this session")
+        .on_click((_e, cx) => { cx.stop_propagation(); pickColor(a, name); })
+        .child(svg("mods/session-color/palette.svg").size(13));
+      const tint = sessionColor(a);
       // Under a space header the space goes without saying; an automatic tab number says nothing.
       // Without a space header above (priority, pinned) the row names its space.
       const full = byPriority || isPinned;
@@ -428,6 +448,9 @@ export default class Agents extends View {
           cx.notify();
         })
         .on_click(() => run("pane.focus", { pane: a.pane }))
+        // Its colour on the left edge; right-click to change it.
+        .when(Boolean(tint), el => el.border_l(3).border_color(tint))
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); pickColor(a, name); })
         .when(Boolean(pic), el => el.child(div().id(`agent-fold-${a.address}`)
           .when(subs.length > 0, el => el.on_click((_e, cx) => {
             cx.stop_propagation();
@@ -442,7 +465,7 @@ export default class Agents extends View {
           .when(Boolean(about.summary), el => el.child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child(about.summary))))
         .when(Boolean(machine), el => el.child(div().text_size(10).text_color(t.dim).child(machine)))
         .when(subs.length > 0, el => el.child(fold(a, subs)))
-        .when(this.hovered === a.address, el => el.child(pin))
+        .when(this.hovered === a.address, el => el.child(paint).child(pin))
         .when(this.hovered !== a.address && Boolean(when), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(duration(now - when))))
         .child(this.status(t, a, byPriority && !isPinned));
     };

@@ -8,7 +8,7 @@
 // into a session's inbox, which its bridge picks up within 2 seconds.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { agents, terminals, spaces, focused, run, home, exec, readTextFile, writeTextFile, theme, shared, window } from "herdr";
+import { agents, terminals, spaces, focused, run, home, exec, readTextFile, writeTextFile, theme, shared, window, openOverlay } from "herdr";
 
 // Who the hub sends as: the person at the keyboard.
 const ME = { id: "hub", name: "ruchira", role: "human" };
@@ -24,6 +24,13 @@ const BRIEF = [
   "Ruchira, the person you work for, watches every session in Zendr's hub and may message you or any agent directly.",
   "Start by listing the peers and asking Ruchira what to work on.",
 ].join(" ");
+
+// A session's colour (mods/session-color): its own, else its space's.
+const SESSION_HEX = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
+function sessionColor(address, space) {
+  const c = (address && (shared("agent.colors") ?? {})[address]) || (space && (shared("space.colors") ?? {})[space]);
+  return c ? SESSION_HEX[c] ?? (c.startsWith("#") ? c : null) : null;
+}
 
 const slash = (p) => (p ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
 const root = () => `${slash(home())}/.claude/session-bridge`;
@@ -150,7 +157,7 @@ export default class Hub extends View {
     const byTerminal = new Map(this.peers.filter(p => p.zendr?.terminal).map(p => [p.zendr.terminal, p]));
     const rows = list.map(a => {
       const peer = byTerminal.get(a.address);
-      return { key: a.address, address: a.address, peer, name: peer?.name ?? a.space_name ?? a.title, role: peer?.role,
+      return { key: a.address, address: a.address, peer, tint: sessionColor(a.address, a.space), name: peer?.name ?? a.space_name ?? a.title, role: peer?.role,
         space: a.space_name, status: a.status, title: (a.title ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").trim(),
         summary: summaries[a.address] ?? null, app: a.program?.name };
     });
@@ -172,6 +179,9 @@ export default class Hub extends View {
     return v_flex().id(`hub-${r.key}`).w_full().flex_none().p(10).gap(4).rounded(9).border_1()
       .border_color(lead ? t.accent : r.status === "blocked" ? t.blocked : selected ? t.accent + "88" : t.border)
       .bg(lead ? t.accent + "12" : t.raised).cursor_pointer().hover(s => s.bg(t.hover))
+      .when(Boolean(r.tint), el => el.border_l(4).border_color(r.tint))
+      .when(Boolean(r.address), el => el.on_mouse_down("right", (_e, cx) => { cx.stop_propagation();
+        openOverlay({ mod: "session-color", kind: "popup", width: 268, props: { kind: "agent", id: r.address, name: r.name } }); }))
       .tooltip(r.address ? "Show this agent's terminal" : "Runs outside Zendr")
       .on_click(() => { if (r.address) this.show(r.address); })
       .child(h_flex().gap(7).items_center()

@@ -1,6 +1,7 @@
 {
   "global": {
     "ctrl-shift-i": "review-tabs.inbox",
-    "ctrl-shift-u": "review-tabs.jump-unread"
+    "ctrl-shift-u": "review-tabs.jump-unread",
+    "ctrl-shift-y": "review-tabs.color"
   }
 }

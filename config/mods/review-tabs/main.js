@@ -3,11 +3,14 @@
 // remembers which of those it shows.
 // Like cmux, it also keeps a notification inbox: each time an agent needs you or finishes it
 // goes into shared("inbox.log"); the bell shows the unread count and opens the inbox mod.
-// Commands (keys.json): review-tabs.inbox, review-tabs.jump-unread.
+// Commands (keys.json): review-tabs.inbox, review-tabs.jump-unread, review-tabs.color (colour this session).
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, ScrollHandle } from "gpui-base";
-import { spaces, panes, agents, terminals, hc, notify, run, openOverlay, theme, window, shared, setShared, layout, settings, nextCommand, appHome, readTextFile } from "herdr";
+import { spaces, panes, agents, terminals, hc, notify, run, openOverlay, theme, window, shared, setShared, layout, settings, nextCommand, appHome, readTextFile, focused } from "herdr";
 
+// A session's own colour (mods/session-color), by terminal address.
+const SESSION_HEX = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
+const ownColor = (address) => { const c = address && (shared("agent.colors") ?? {})[address]; return c ? SESSION_HEX[c] ?? (c.startsWith("#") ? c : null) : null; };
 // Settings → Notifications (settings.json `notifications`), read here for every mod.
 const prefs = () => shared("notify.prefs") ?? {};
 const keep = () => Number(prefs().keep) || 200;
@@ -24,6 +27,15 @@ function jumpUnread() {
     if (entry.tab) run("tab.select", { id: entry.tab });
     run("pane.focus", { terminal: entry.terminal });
   }
+}
+
+// Colour the focused session (mods/session-color).
+function pickFocusedColor() {
+  const f = focused(), address = f?.agent ?? f?.terminal;
+  if (!address) return;
+  const tab = spaces().flatMap(s => s.tabs).find(c => c.id === f.tab);
+  const lead = panes().find(p => p.tab === f.tab && p.program?.agent) ?? panes().find(p => p.tab === f.tab);
+  openOverlay({ mod: "session-color", kind: "popup", width: 268, props: { kind: "agent", id: address, name: tab ? label(tab, lead) : null } });
 }
 
 function find(node, id) {
@@ -66,6 +78,7 @@ export default class Tabs extends View {
         const command = await nextCommand();
         if (command === "inbox") openInbox();
         else if (command === "jump-unread") jumpUnread();
+        else if (command === "color") pickFocusedColor();
         cx.notify();
       }
     });
@@ -261,6 +274,7 @@ export default class Tabs extends View {
       const lead = panes().find(p => p.tab === c.id && p.program?.agent) ?? panes().find(p => p.tab === c.id);
       const program = lead?.program;
       const name = label(c, lead);
+      const tint = ownColor(lead?.terminal);
       return h_flex().id(`tab-${c.id}`).h(29).px(10).gap(7).rounded(7).items_center().flex_none().text_size(12.8)
         // A rename or status dot on this or an earlier tab can push the active one out.
         .when(i <= active, el => el.on_size_change((_size, cx) => { this.scroll.scroll_to_item(active); cx.notify(); }))
@@ -274,6 +288,8 @@ export default class Tabs extends View {
           else run("tab.select", { id: c.id });
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "review-menu", kind: "popup", width: 220, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
+        // The session's colour (right-click → Colour…).
+        .when(Boolean(tint), el => el.child(div().w(3).h(14).flex_none().rounded(2).bg(tint)))
         .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(14).text_color(t.muted) : image(program.icon).size(14)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
         .when(c.status === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))

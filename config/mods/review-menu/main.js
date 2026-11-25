@@ -9,6 +9,9 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { run, props, closeOverlay, openOverlay, theme, keys, terminals, spaces, panes, exec, layout } from "herdr";
 
+// A tab's session: its agent's terminal, else its first.
+const leadTerminal = (tab) => (panes().find((p) => p.tab === tab && p.program?.agent) ?? panes().find((p) => p.tab === tab && p.terminal))?.terminal;
+
 function findNode(node, id) {
   if (node?.id === id) return node;
   for (const child of node?.children ?? []) { const found = findNode(child, id); if (found) return found; }
@@ -79,12 +82,14 @@ function items(p, git) {
       return [
         ...viewItems(),
         ["Rename", "tab.rename", { id: tg.id }],
+        ...(leadTerminal(tg.id) ? [["Colour…", "color", { kind: "agent", id: leadTerminal(tg.id), name: spaces().flatMap((s) => s.tabs).find((c) => c.id === tg.id)?.name }]] : []),
         ["New tab", "tab.new", { space: tg.space }],
         ["Close", "tab.close", { id: tg.id }],
       ];
     case "space":
       return [
         ["Rename", "space.rename", { id: tg.id }],
+        ["Colour…", "color", { kind: "space", id: tg.id, name: spaces().find((s) => s.id === tg.id)?.name }],
         ...(git ? [["New worktree", "worktree", { space: tg.id, action: "new" }], ["Open worktree", "worktree", { space: tg.id, action: "open" }]] : []),
         ...(git === "linked" ? [["Remove worktree", "worktree", { space: tg.id, action: "remove" }]] : []),
         ["Close", "space.close", { id: tg.id }],
@@ -103,6 +108,7 @@ function items(p, git) {
 
 function menuIcon(command, args) {
   if (command === "layout.show" || command === "layout.hide") return `mods/workspace-chrome/${command === "layout.hide" ? "minus" : (VIEWS.find(([id]) => id === args?.id)?.[2] ?? "square")}.svg`;
+  if (command === "color") return "mods/session-color/palette.svg";
   const name = command.endsWith(".close") ? "x" : command.endsWith(".rename") ? "square-pen" : command.endsWith(".new") ? "plus" : command === "worktree" ? "git-branch" : command === "app.help" ? "terminal" : command === "app.theme" ? "settings" : command === "pane.split" ? (args?.direction === "down" ? "panel-bottom" : "panel-right") : command === "pane.zoom" ? "square" : "terminal";
   return `mods/workspace-chrome/${name}.svg`;
 }
@@ -136,6 +142,7 @@ export default class Menu extends View {
     if (!it) return;
     closeOverlay(props()?.overlay);
     if (it[1] === "worktree") openOverlay({ mod: "worktree", kind: "dialog", ...(it[2].action === "open" ? { width: 560, height: 480 } : { width: 440, height: 260 }), props: it[2] });
+    else if (it[1] === "color") openOverlay({ mod: "session-color", kind: "popup", width: 268, props: it[2] });
     else run(it[1], it[2]);
   }
 
