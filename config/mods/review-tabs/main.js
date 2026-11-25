@@ -6,13 +6,15 @@
 // Commands (keys.json): review-tabs.inbox, review-tabs.jump-unread.
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, ScrollHandle } from "gpui-base";
-import { spaces, panes, agents, terminals, hc, notify, run, openOverlay, theme, window, shared, setShared, layout, settings, nextCommand } from "herdr";
+import { spaces, panes, agents, terminals, hc, notify, run, openOverlay, theme, window, shared, setShared, layout, settings, nextCommand, appHome, readTextFile } from "herdr";
 
-const LOG_MAX = 200;
+// Settings → Notifications (settings.json `notifications`), read here for every mod.
+const prefs = () => shared("notify.prefs") ?? {};
+const keep = () => Number(prefs().keep) || 200;
 let seq = 0;
 
 // Opens the inbox, or goes to the newest unread notification and marks it read.
-function openInbox() { openOverlay({ mod: "inbox", kind: "popup", width: 380, height: 460 }); }
+function openInbox() { openOverlay({ mod: "inbox", kind: "popup", width: 400, height: 540 }); }
 function jumpUnread() {
   const entry = (shared("inbox.log") ?? []).find(e => !e.read);
   if (!entry) { openInbox(); return; }
@@ -55,6 +57,8 @@ export default class Tabs extends View {
     try { const saved = JSON.parse(localStorage.getItem("inbox") ?? "[]"); if (Array.isArray(saved) && !shared("inbox.log")) setShared("inbox.log", saved); } catch {}
     this.statuses = null;
     cx.timer.every(500, () => { this.record(); this.bridge(); });
+    this.loadPrefs(cx);
+    cx.timer.every(1500, cx => this.loadPrefs(cx));
     this.titles = {}; // terminal -> the bridge title last given to its tab
     this.handling = new Map(); // request -> when it was handled (until its label is gone)
     cx.spawn(async cx => {
@@ -96,6 +100,17 @@ export default class Tabs extends View {
     run(e.delta.y > 0 ? "tab.prev" : "tab.next");
   }
 
+  // Shares settings.json's notification preferences whenever the file changes.
+  async loadPrefs(cx) {
+    const raw = await readTextFile(`${appHome()}/settings.json`).catch(() => null);
+    if (raw === this.prefsRaw) return;
+    this.prefsRaw = raw;
+    let n = {};
+    try { n = JSON.parse(raw ?? "{}")?.notifications ?? {}; } catch { return; } // mid-edit: keep the last
+    setShared("notify.prefs", n && typeof n === "object" ? n : {});
+    cx.notify();
+  }
+
   // An agent turning blocked (needs you) or done (finished) is a notification. It reads
   // itself once the agent moves on (you answered it, or looked at the finished one).
   record() {
@@ -106,15 +121,18 @@ export default class Tabs extends View {
     let log = shared("inbox.log") ?? [], changed = false;
     for (const a of list) {
       if (a.status === before.get(a.address) || (a.status !== "blocked" && a.status !== "done")) continue;
+      if (prefs()[a.status]?.inbox === false) continue;
       log = [{ id: `${Date.now()}-${seq++}`, at: Date.now(), kind: "agent", space: a.space, space_name: a.space_name, tab: a.tab,
         terminal: a.address, app: a.app, status: a.status, title: a.status === "blocked" ? "Needs you" : "Finished",
-        body: (a.title ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").trim(), read: Boolean(a.focused) }, ...log].slice(0, LOG_MAX);
+        body: (a.title ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").trim(), read: Boolean(a.focused) }, ...log].slice(0, keep());
       changed = true;
     }
+    // Looking at the agent reads its notifications too (Settings → Notifications).
+    const visiting = prefs().read_on_visit !== false && window()?.active !== false ? new Set(list.filter(a => a.focused).map(a => a.address)) : new Set();
     log = log.map(e => {
-      if (e.read || e.kind !== "agent") return e;
+      if (e.read || !e.terminal) return e;
       const s = now.get(e.terminal);
-      if (s === e.status) return e;
+      if (!visiting.has(e.terminal) && (e.kind !== "agent" || s === e.status)) return e;
       changed = true;
       return { ...e, read: true };
     });
@@ -153,8 +171,8 @@ export default class Tabs extends View {
         const s = spaces().find(x => x.id === space);
         const entry = { id: `bridge-${Date.now()}-${seq++}`, at: Date.now(), kind: "bridge", space, space_name: s?.name, tab, terminal: address,
           app: "session-bridge", status: "blocked", title: n.title || "Session bridge", body: n.body ?? "", read: false };
-        setShared("inbox.log", [entry, ...(shared("inbox.log") ?? [])].slice(0, LOG_MAX));
-        notify({ title: entry.title, body: entry.body, level: "info", action: { name: "agent.focus", args: { terminal: address } } });
+        if (prefs().bridge?.inbox !== false) setShared("inbox.log", [entry, ...(shared("inbox.log") ?? [])].slice(0, keep()));
+        notify({ title: entry.title, body: [s?.name, entry.body].filter(Boolean).join(" · "), level: "info", kind: "bridge", action: { name: "agent.focus", args: { terminal: address } } });
       }
       if (labels["bridge.focus"] && done("bridge.focus")) {
         if (space) run("space.select", { id: space });
@@ -270,6 +288,7 @@ export default class Tabs extends View {
     const panel = find(root, "panel"), body = find(root, "panel-body");
     const enabled = shared("workspace.panels") ?? ["files", "changes"];
     const unread = (shared("inbox.log") ?? []).filter(e => !e.read).length;
+    const badge = prefs().badge ?? "count", quiet = (prefs().quiet_until ?? 0) > Date.now();
     this.syncPanel(space, panel, body, enabled);
     this.syncViews(space, root);
     const panelButton = (id, label, icon) => {
@@ -289,10 +308,14 @@ export default class Tabs extends View {
         .on_size_change((_size, cx) => { if (active >= 0) { this.scroll.scroll_to_item(active); cx.notify(); } })
         .children(shown.map(item)))
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
-      .child(div().relative().flex_none()
+      .child(div().id("inbox-bell").relative().flex_none()
+        .tooltip(unread ? `Notifications: ${unread} unread (Ctrl+Shift+I)` : "Notifications (Ctrl+Shift+I)")
         .child(button("inbox", svg("mods/review-tabs/bell.svg").size(14), openInbox))
-        .when(unread > 0, el => el.child(div().absolute().top(1).right(0).min_w(14).h(14).px(3).rounded(7).bg(t.blocked)
-          .flex().items_center().justify_center().text_size(9.5).font_semibold().text_color(t.background).child(unread > 99 ? "99+" : String(unread)))))
+        // Settings → Notifications: a number, a dot, or nothing.
+        .when(unread > 0 && badge === "count", el => el.child(div().absolute().top(1).right(0).min_w(14).h(14).px(3).rounded(7).bg(t.blocked)
+          .flex().items_center().justify_center().text_size(9.5).font_semibold().text_color(t.background).child(unread > 99 ? "99+" : String(unread))))
+        .when(unread > 0 && badge === "dot", el => el.child(div().absolute().top(4).right(4).size(8).rounded(4).bg(t.blocked)))
+        .when(quiet, el => el.child(div().absolute().bottom(2).right(1).size(9).rounded(5).bg(t.working).border_1().border_color(t.chrome))))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/review-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))

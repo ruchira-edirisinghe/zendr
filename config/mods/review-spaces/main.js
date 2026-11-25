@@ -168,7 +168,7 @@ export default class Spaces extends View {
   meta(w, t, ps) {
     const ports = this.ports[w.id] ?? [];
     const pr = this.prs[where(w, ps)];
-    const note = (shared("inbox.log") ?? []).find(e => !e.read && e.space === w.id);
+    const note = (shared("notify.prefs") ?? {}).sidebar_note === false ? null : (shared("inbox.log") ?? []).find(e => !e.read && e.space === w.id);
     let bridge = null;
     for (const term of terminals()) {
       const l = term.labels ?? {};

@@ -8,7 +8,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, props, run, theme, home, layout } from "herdr";
+import { panes, props, run, theme, home, layout, shared } from "herdr";
 
 // Match the first visible tab frame, including the active child of a stack.
 function paneFrame(node) {
@@ -68,7 +68,8 @@ export default class Pane extends View {
     const pane = p.pane;
     const bottom = paneFrame(layout())?.header?.position === "bottom";
     // Done rings only until the pane is focused (Herdr then turns it idle).
-    const ring = st === "blocked" || st === "done" ? st : null;
+    // Settings → Notifications can turn rings off.
+    const ring = (st === "blocked" || st === "done") && (shared("notify.prefs") ?? {}).rings !== false ? st : null;
     return h_flex()
       .id(`pane-head-${pane}`)
       .size_full()
