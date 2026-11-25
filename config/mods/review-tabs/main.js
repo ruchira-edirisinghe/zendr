@@ -155,6 +155,9 @@ export default class Tabs extends View {
     // The hub turned off: the drawer stops showing it.
     const side = find(layout(), "side");
     if (side && f?.hub === false && !side.hidden && side.active === "hub") run("layout.hide", { id: "side" });
+    // Agents live in the Sessions list, under their spaces, unless the separate list is turned on.
+    const list = find(layout(), "agents"), separate = f?.agents_list === true;
+    if (list && Boolean(list.hidden) === separate) run(separate ? "layout.show" : "layout.hide", { id: "agents" });
     cx.notify();
   }
 

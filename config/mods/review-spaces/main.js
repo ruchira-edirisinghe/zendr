@@ -1,3 +1,6 @@
+// Sessions: each space with its sessions (its tabs: an agent, a shell) nested under it,
+// each saying what it's doing and whether it needs you. (Settings → Features → Separate
+// Agents list puts the agents back in their own list below instead.)
 // Workspace spaces: stable colored avatars, worktrees under their checkout,
 // grouped by machine when more than one is known. After a space's name, the repo
 // its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
@@ -6,9 +9,9 @@
 // listen on, its branch's pull request (gh), Claude Code's session-bridge status (the
 // bridge.status label its terminal carries), and its latest unread notification.
 
-import { View, div, svg } from "gpui-kit";
+import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { spaces, machines, panes, terminals, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, machines, panes, terminals, agents, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -82,6 +85,64 @@ export function tone(t, status) {
   return t[status] ?? t.unknown;
 }
 
+// Settings → Features: each on unless turned off; the separate Agents list only when turned on.
+const feature = (id) => (shared("zendr.features") ?? {})[id] !== false;
+const nesting = () => (shared("zendr.features") ?? {}).agents_list !== true;
+
+// A session's colour (mods/session-color): its own, else its space's avatar colour.
+function sessionColor(address, space) {
+  if (!feature("session_colors")) return null;
+  const c = (shared("agent.colors") ?? {})[address] ?? (shared("space.colors") ?? {})[space];
+  return c ? MARK[c] ?? (c.startsWith("#") ? c : null) : null;
+}
+
+// A tab's lead pane: its first agent, else its focused terminal, else its first terminal.
+function leadPanes(all) {
+  const leads = new Map();
+  for (const p of all) {
+    if (!p.terminal) continue;
+    const current = leads.get(p.tab);
+    if (!current || (!current.program?.agent && (p.program?.agent || (!current.focused && p.focused)))) leads.set(p.tab, p);
+  }
+  return leads;
+}
+
+// As the agents list: drops a status glyph before a title, keeps a leading bracket or quote.
+const clean = (s) => (s ?? "").replace(/^(?:\[ [!.] \] |[✋⏳]️?(?=\s)|(?!(?:\p{Emoji}️|[#*]⃣))[^\p{L}\p{N}\p{Ps}\p{Pi}\p{Emoji_Presentation}])+/u, "").trim();
+// A tab Herdr named (unnamed, or after its program) follows its agent's live title; a name the person gave stays.
+function sessionName(tab, l) {
+  const prog = l?.program?.name;
+  const live = clean(l?.title);
+  const path = /^[~/]|^[A-Za-z]:\\/.test((l?.title ?? "").replace(/^[^\p{L}\p{N}~/]+/u, ""));
+  const telling = live && live !== l?.terminal && live !== prog && !path && !live.includes("@") && live.toLowerCase() !== l?.program?.key;
+  const name = (tab.name === prog || !tab.named) && telling ? live : tab.name;
+  return /^\d+$/.test(name) ? prog || `Tab ${name}` : name;
+}
+
+// What an agent's screen says it's up to: a question it is asking, else its latest message, else its step.
+const BULLET = /^\s*[●⏺•◆]\s+(.*\S)/u;
+const STEP = /^[A-Z][\w.:-]*\(/;
+const QUESTION = /^\s*(Do you want to .*\?|Allow .*\?|.*\(y\/n\).*|Would you like .*\?)\s*$/i;
+function summarize(screen, status) {
+  let said = null, step = null, ask = null;
+  for (const raw of screen.split(/\r?\n/)) {
+    const line = raw.replace(/\s+$/, "");
+    if (QUESTION.test(line)) ask = line.trim();
+    const m = BULLET.exec(line);
+    if (!m) continue;
+    const text = m[1].replace(/\s+/g, " ").trim();
+    if (STEP.test(text)) step = text; else said = text;
+  }
+  if (status === "blocked" && ask) return ask;
+  if (status === "working" && step) return step;
+  return said ?? step ?? null;
+}
+
+function since(ms) {
+  const m = Math.floor(Math.max(0, Date.now() - ms) / 60000);
+  return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`;
+}
+
 export default class Spaces extends View {
   init(_props, cx) {
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
@@ -118,6 +179,96 @@ export default class Spaces extends View {
     this.refreshPorts(cx);
     cx.timer.every(20000, cx => { if (window()?.active !== false) this.refreshPorts(cx); });
     cx.timer.every(30000, cx => this.refreshPrs(cx));
+    this.summaries = {}; // address -> { key, text }
+    try { this.foldedSpaces = new Set(JSON.parse(localStorage.getItem("sessions.folded") ?? "[]")); } catch { this.foldedSpaces = new Set(); }
+    cx.timer.every(3000, cx => { if (nesting()) this.readSummaries(cx); });
+    cx.timer.every(30000, cx => cx.notify()); // "5m" keeps moving.
+  }
+
+  // Each agent whose state moved since its last read: its screen, for a one-line summary.
+  // The hub shows the same summaries (shared "agents.summaries").
+  async readSummaries(cx) {
+    if (this.reading || window()?.visible === false) return;
+    this.reading = true;
+    try {
+      let changed = false;
+      for (const a of agents()) {
+        const key = `${a.status}:${a.seq}`;
+        if (this.summaries[a.address]?.key === key) continue;
+        const r = await hc(["read", a.address, "--lines", "80"]).catch(() => null);
+        const text = r?.code === 0 ? summarize(r.stdout, a.status) : null;
+        if (text !== (this.summaries[a.address]?.text ?? null)) changed = true;
+        this.summaries[a.address] = { key, text };
+      }
+      if (changed) {
+        setShared("agents.summaries", Object.fromEntries(Object.entries(this.summaries).map(([k, v]) => [k, v.text])));
+        cx.notify();
+      }
+    } finally { this.reading = false; }
+  }
+
+  // What a session is doing, in a word (and colour, and a shape: never colour alone).
+  statusBadge(t, status) {
+    if (status === "blocked") return div().flex_none().px(6).h(18).rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
+    if (status === "working") return h_flex().flex_none().gap(4).items_center().text_size(11).text_color(t.working)
+      .child(svg("mods/workspace-chrome/spinner.svg").size(11).spin(900)).child("Working");
+    if (status === "done") return h_flex().flex_none().gap(4).items_center().text_size(11).text_color(t.done)
+      .child(div().size(7).rounded(4).bg(t.done)).child("Done");
+    return null;
+  }
+
+  // One session under its space: icon, name, what it's doing, its state. Click goes there;
+  // right-click colours it.
+  session(w, tab, lead, agent, t) {
+    const address = lead?.terminal ?? null;
+    const status = agent?.status ?? tab.status ?? null;
+    const on = w.active && tab.active;
+    const tint = address ? sessionColor(address, w.id) : null;
+    const name = sessionName(tab, lead);
+    const summary = agent && feature("agent_summaries")
+      ? (shared("agents.summaries") ?? {})[agent.address] ?? (shared("inbox.log") ?? []).find(e => e.terminal === agent.address && e.body)?.body ?? null
+      : null;
+    const prog = lead?.program;
+    const pic = prog?.icon ? (prog.tint ? svg(prog.icon).size(15).flex_none().text_color(t.foreground) : image(prog.icon).w(15).h(15).flex_none())
+      : svg("mods/workspace-chrome/terminal.svg").size(14).flex_none().text_color(t.muted);
+    const badge = this.statusBadge(t, status);
+    const at = tab.changed_at ?? tab.settled_at;
+    const quiet = !on && (status === "idle" || !status);
+    return h_flex()
+      .id(`session-${tab.id}`)
+      .ml(18).pl(9).pr(8)
+      .when(Boolean(summary), el => el.py(5)).when(!summary, el => el.h(30))
+      .flex_none().gap(9).items_center().rounded(8).cursor_pointer()
+      .when(!tint, el => el.when(on, el => el.bg(t.selected)).hover(s => s.bg(t.hover)))
+      .when(Boolean(tint), el => el.border_1().bg(tint + (on ? "42" : "14")).border_color(on ? tint + "cc" : "#00000000")
+        .hover(s => s.bg(tint + (on ? "4d" : "2e"))))
+      .tooltip(`${name}${status === "blocked" ? " needs you" : ""}. Click to go there${address && feature("session_colors") ? ", right-click to colour it" : ""}.`)
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        if (agent) run("pane.focus", { pane: agent.pane });
+        else { run("space.select", { id: w.id }); run("tab.select", { id: tab.id }); }
+      })
+      .when(Boolean(address) && feature("session_colors"), el => el.on_mouse_down("right", (_e, cx) => {
+        cx.stop_propagation();
+        openOverlay({ mod: "session-color", kind: "popup", width: 268, props: { kind: "agent", id: address, name } });
+      }))
+      .child(pic)
+      .child(v_flex().flex_1().min_w(0).gap(1)
+        .child(div().truncate().text_size(13).text_color(quiet ? t.muted : t.foreground).when(on, el => el.font_medium()).child(name))
+        .when(Boolean(summary), el => el.child(div().truncate().text_size(11.5).text_color(status === "blocked" ? t.blocked : t.dim).child(summary))))
+      .when(Boolean(badge), el => el.child(badge))
+      .when(!badge && Boolean(at), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(since(at))));
+  }
+
+  // A space and, unless folded, its sessions.
+  block(r, t, leads, byPane) {
+    const head = this.row(r, t);
+    if (!nesting()) return head;
+    const tabs = r.w.tabs ?? [];
+    if (!tabs.length || this.foldedSpaces.has(r.w.id)) return head;
+    return v_flex().flex_none().gap(2).pb(4)
+      .child(head)
+      .children(tabs.map(tab => { const lead = leads.get(tab.id); return this.session(r.w, tab, lead, lead?.terminal ? byPane.get(lead.terminal) : null, t); }));
   }
 
   // Ports: each local terminal's process (hc get), then one PowerShell look at every
@@ -431,7 +582,9 @@ export default class Spaces extends View {
   // The rows, under a header per machine once one isn't this computer.
   grouped(t, collapsed) {
     const rows = this.ordered();
-    const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));
+    const leads = leadPanes(panes());
+    const byPane = new Map(agents().map(a => [a.address, a]));
+    const draw = (r) => (collapsed ? this.compact(r, t) : this.block(r, t, leads, byPane));
     // Where the active space's row lands among the children this returns: the list scrolls by its direct
     // children, and machine headers, login notes and loading rows count too.
     this.activeAt = -1;
@@ -542,6 +695,20 @@ export default class Spaces extends View {
 
   row({ w, i, g, tree }, t) {
     const on = w.active;
+    const nest = nesting() && (w.tabs ?? []).length > 0;
+    const folded = nest && this.foldedSpaces.has(w.id);
+    const RANKS = { blocked: 3, done: 2, working: 1 };
+    const top = folded ? (w.tabs ?? []).map(c => c.status).reduce((m, s) => ((RANKS[s] ?? 0) > (RANKS[m] ?? 0) ? s : m), null) : null;
+    const chevron = div().id(`space-fold-${w.id}`).flex_none().size(18).flex().items_center().justify_center().rounded(4).text_color(t.dim)
+      .hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip(folded ? "Show its sessions" : "Hide its sessions")
+      // On press, and kept from the row: it neither selects nor starts a drag.
+      .on_mouse_down("left", (_e, cx) => {
+        cx.stop_propagation();
+        folded ? this.foldedSpaces.delete(w.id) : this.foldedSpaces.add(w.id);
+        localStorage.setItem("sessions.folded", JSON.stringify([...this.foldedSpaces]));
+        cx.notify();
+      })
+      .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11));
     const fromIndex = this.pressed === null ? -1 : spaces().findIndex(s => s.id === this.pressed);
     const colors = shared("space.colors") ?? {};
     const color = colors[w.id] ?? "ansi6";
@@ -593,8 +760,10 @@ export default class Spaces extends View {
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.dim)))
           .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child(spaceAvatar(w.name))))
-          .child(div().flex_initial().min_w(SIDE_MIN).truncate().text_color(t.foreground).child(w.name))
-          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1()),
+          .child(div().flex_initial().min_w(SIDE_MIN).truncate().text_size(13.5).font_medium().text_color(t.foreground).child(w.name))
+          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
+          .when(folded, el => el.child(div().flex_none().text_size(11).text_color(t[top] ?? t.dim).child(`${w.tabs.length}`)))
+          .when(nest, el => el.child(chevron)),
       )
       .when(Boolean(meta), el => el.child(meta.pl(tree ? 44 : 27)));
   }
@@ -641,8 +810,8 @@ export default class Spaces extends View {
     return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
       .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11.5).text_color(t.dim)
         .when(collapsed, el => el.pl(0).pr(0).justify_center())
-        .when(!collapsed, el => el.child("Spaces"))
-        .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
+        .when(!collapsed, el => el.child(div().text_size(12).font_semibold().text_color(t.muted).child(nesting() ? "Sessions" : "Spaces")))
+        .child(div().id("space-new").tooltip("New space").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
       .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).pb(14).overflow_y_scrollbar().mode("always").track_scroll(this.scroll)
         // A block above (another mod's) growing, or the window resizing, shrinks this list and can push the active space out.
