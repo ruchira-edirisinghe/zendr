@@ -18,7 +18,8 @@ Zendr is made from the code of **[Herdr](https://herdr.dev)** ([herdrdev](https:
 - The Changes panel can open any changed file in full, beside the terminal or in its own tab.
 
 **Inspired by cmux:**
-- **Notifications inbox.** A bell in the tab bar shows an unread count. Each time an agent needs you or finishes, and each notification, is listed newest first. Click one to go to it. `Ctrl+Shift+I` opens the inbox; `Ctrl+Shift+U` jumps to the latest unread.
+- **Notifications inbox.** A bell in the tab bar shows an unread count. Each time an agent needs you or finishes, each session-bridge message and each other notice is listed, newest first and grouped by day. Each kind is named in words and has its own icon. Filter them, remove one, or pause them all for an hour. Click one to go to it. `Ctrl+Shift+I` opens the inbox; `Ctrl+Shift+U` jumps to the latest unread.
+- **Notification settings.** Settings → Notifications sets, for each kind, whether it pops up, plays a sound and reaches the inbox. It also covers do not disturb, how long pop-ups stay (or until clicked), the bell badge (number, dot or nothing), how many notifications to keep, marking read when you go there, pane rings and the sidebar line.
 - **Attention rings.** A pane whose agent needs you gets a tinted header with a coloured edge. Its tab lights up too.
 - **A sidebar that says what each space is up to.** Under a space's name: the ports its programs listen on, its branch's pull request (via `gh`), its session-bridge status, and its latest unread notification.
 - **Agents that say what they're doing.** Each agent in the Agents list shows its current task (its title) and a one-line summary: the question it's asking, the step it's on, or its last message.
@@ -27,6 +28,10 @@ Zendr is made from the code of **[Herdr](https://herdr.dev)** ([herdrdev](https:
   - switches to another session (`/bridge-focus`)
   - names tabs after their sessions
   - shows its status in the sidebar and its held messages in the inbox
+
+**New in Zendr:**
+- **The hub.** A panel on the right shows every agent and what it's doing. A coordinator, a Claude Code session that plans the work and messages the others over the session bridge, is shown apart at the top. The hub lists the messages between sessions and has a box for you to message the coordinator, one agent or everyone. **Start coordinator** opens the coordinator in a new space with its brief.
+- **Session colours.** Give a session one of twelve named colours, or let it use its space's. The colour edges its row in Agents and its hub card, and marks its tab. Right-click the row, the card or the tab, or press `Ctrl+Shift+Y` for the focused session. A space's menu changes the space's colour.
 
 A few cmux features aren't here. The in-app browser isn't possible, because Herdr's mod API has no web view. Session restore, SSH machines, a CLI and workspace number keys were already in Herdr.
 
@@ -42,7 +47,7 @@ A few cmux features aren't here. The in-app browser isn't possible, because Herd
 `app/`, `core/` and `tui/` are git subtrees, and each keeps its upstream license and notices. Their full histories are on the `zendr` and `windows-arm64` branches of [herdr-app](https://github.com/ruchira-edirisinghe/herdr-app/tree/zendr), [herdr-core](https://github.com/ruchira-edirisinghe/herdr-core/tree/windows-arm64) and [herdr](https://github.com/ruchira-edirisinghe/herdr/tree/windows-arm64).
 
 Changes from Herdr:
-- **app.** The name Zendr wherever people read it, the lizard icon, a credit in Settings, and an ARM64 build-and-install script.
+- **app.** The name Zendr wherever people read it, the lizard icon, a credit in Settings, a Notifications settings section the app follows (pop-up length, do not disturb, sounds by kind), and an ARM64 build-and-install script.
 - **core.** A static CRT, the ARM64 ConPTY (`OpenConsole.exe`), and an installer that takes a local ARM64 build.
 
 Internal names are unchanged, so Herdr setups and tools keep working: `herdr-app.exe`, `hc`, `~/.config/herdr-app` and the key contexts. The installer also adds a `zendr` command.
