@@ -103,7 +103,8 @@
                 "px": 260
               },
               "min": 180,
-              "max": 560
+              "max": 560,
+              "hidden": true
             },
             {
               "id": "code",
@@ -117,7 +118,8 @@
               "size": {
                 "weight": 1
               },
-              "min": 320
+              "min": 320,
+              "hidden": true
             },
             {
               "id": "main",

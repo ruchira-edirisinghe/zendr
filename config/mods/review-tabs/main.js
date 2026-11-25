@@ -112,6 +112,8 @@ export default class Tabs extends View {
     try { this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}"); } catch { this.panels = {}; }
     try { this.views = JSON.parse(localStorage.getItem("views") ?? "{}"); } catch { this.views = {}; }
     if (!this.views || typeof this.views !== "object" || Array.isArray(this.views)) this.views = {};
+    // Spaces now open with just the terminal: what was kept under the old default goes once.
+    if (localStorage.getItem("views.v") !== "2") { this.views = {}; localStorage.setItem("views", "{}"); localStorage.setItem("views.v", "2"); }
     if (!this.panels || typeof this.panels !== "object" || Array.isArray(this.panels)) this.panels = {};
     this.swipe = { acc: 0, steps: 0, at: 0, last: 0 };
   }
@@ -261,7 +263,8 @@ export default class Tabs extends View {
   }
 
   // The explorer, code reviewer and terminal blocks are remembered per space, like the
-  // side panel: a space opens with all three unless it was left otherwise.
+  // side panel: a space opens with just the terminal (the toolbar shows the others)
+  // unless it was left otherwise.
   syncViews(space, root) {
     if (!space) return;
     const ids = ["explorer", "code", "main"].filter(id => find(root, id));
@@ -269,7 +272,7 @@ export default class Tabs extends View {
     const now = Object.fromEntries(ids.map(id => [id, !find(root, id).hidden]));
     if (space.id !== this.viewSpace) {
       this.viewSpace = space.id; this.viewPending = null;
-      const want = Object.fromEntries(ids.map(id => [id, this.views[space.id]?.[id] ?? true]));
+      const want = Object.fromEntries(ids.map(id => [id, this.views[space.id]?.[id] ?? id === "main"]));
       if (!ids.some(id => want[id])) want[ids[ids.length - 1]] = true;
       const differ = ids.filter(id => want[id] !== now[id]);
       if (differ.length) {
