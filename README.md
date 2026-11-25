@@ -33,6 +33,16 @@ Zendr is made from the code of **[Herdr](https://herdr.dev)** ([herdrdev](https:
 - **The hub.** A panel on the right shows every agent and what it's doing. A coordinator, a Claude Code session that plans the work and messages the others over the session bridge, is shown apart at the top. The hub lists the messages between sessions and has a box for you to message the coordinator, one agent or everyone. **Start coordinator** opens the coordinator in a new space with its brief.
 - **Session colours.** Give a session one of twelve named colours, or let it use its space's. The colour edges its row in Agents and its hub card, and marks its tab. Right-click the row, the card or the tab, or press `Ctrl+Shift+Y` for the focused session. A space's menu changes the space's colour.
 
+**Inspired by Warp:**
+- **Command search** (`Ctrl+Shift+R`, or the `</>` button in the tab bar). Your shell history and your saved workflows in one searchable list. Enter pastes the command into the terminal for you to check; Ctrl+Enter runs it.
+- **Workflows.** Saved commands with `{{placeholders}}` that Zendr asks you to fill in. Save one from your history, or edit `workflows.json`.
+- **Ask AI** (`Ctrl+Shift+Space`). Describe what you want, and Claude Code writes up to three commands for the terminal's shell.
+- **Launch configurations** (`Ctrl+Shift+J`). Save the spaces and tabs you have open as a setup, and open it again later. Agents start again in their folders.
+
+Warp's command blocks and its input editor aren't here: they would need changes to the terminal itself.
+
+**Make it yours:** Settings → Features turns off anything you don't use, or **Keep it simple** turns off all the extras at once. Finished agents show in green.
+
 A few cmux features aren't here. The in-app browser isn't possible, because Herdr's mod API has no web view. Session restore, SSH machines, a CLI and workspace number keys were already in Herdr.
 
 ## Layout of this repository
