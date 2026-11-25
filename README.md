@@ -31,7 +31,7 @@ Zendr is made from the code of **[Herdr](https://herdr.dev)** ([herdrdev](https:
 
 **New in Zendr:**
 - **The hub.** A panel on the right shows every agent and what it's doing. A coordinator, a Claude Code session that plans the work and messages the others over the session bridge, is shown apart at the top. The hub lists the messages between sessions and has a box for you to message the coordinator, one agent or everyone. **Start coordinator** opens the coordinator in a new space with its brief.
-- **Session colours.** Give a session one of twelve named colours, or let it use its space's. The colour edges its row in Agents and its hub card, and marks its tab. Right-click the row, the card or the tab, or press `Ctrl+Shift+Y` for the focused session. A space's menu changes the space's colour.
+- **Session colours.** Give a session one of twelve named colours, or let it use its space's. The colour tints its whole row in Agents, its tab and its hub card; the selected one is stronger and outlined. Right-click the row, the card or the tab, or press `Ctrl+Shift+Y` for the focused session. A space's menu changes the space's colour.
 
 **Inspired by Warp:**
 - **Command search** (`Ctrl+Shift+R`, or the `</>` button in the tab bar). Your shell history and your saved workflows in one searchable list. Enter pastes the command into the terminal for you to check; Ctrl+Enter runs it.
