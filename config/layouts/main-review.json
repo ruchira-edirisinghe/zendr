@@ -173,6 +173,14 @@
                     "mod": "inbox"
                   },
                   "title": "Notifications"
+                },
+                {
+                  "id": "graph",
+                  "type": "block",
+                  "content": {
+                    "mod": "git-graph"
+                  },
+                  "title": "Graph"
                 }
               ],
               "active": "hub",

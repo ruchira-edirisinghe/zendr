@@ -1,0 +1,7 @@
+{
+  "place": "none",
+  "title": "Graph",
+  "palette": [
+    { "title": "Show or hide the source control graph", "command": "review-tabs.graph", "words": "git graph history log commits branches source control" }
+  ]
+}
