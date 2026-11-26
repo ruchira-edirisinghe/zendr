@@ -5,6 +5,8 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, run, setShared, layout } from "herdr";
+// File-type icons, shared with the code view.
+import { fileIcon } from "./lang.js";
 
 // The panels share data in one VM, but their host tasks belong to separate copies.
 const scans = globalThis[Symbol.for("herdr.repoStatus.v2")] ??= new Map();
@@ -294,14 +296,14 @@ export default class Changes extends View {
     const tab = focused()?.tab, view = tab && panes().find(p => p.tab === tab && p.mod === "review-file");
     if (block) {
       if (block.hidden) run("layout.show", { id: "code" });
-      setShared("review-file.goto", { ...file, target: "layout", isGit: true, at: Date.now() });
-    } else if (view) setShared("review-file.goto", { ...file, tab, at: Date.now() });
+      setShared("review-file.goto", { ...file, target: "layout", isGit: true, mode: "review", pin: true, at: Date.now() });
+    } else if (view) setShared("review-file.goto", { ...file, tab, mode: "review", pin: true, at: Date.now() });
     else run("pane.split", { direction: "right", mod: "review-file", props: file });
   }
 
   openFullTab(path) {
     if (!this.root || !path) return;
-    run("tab.new", { name: path.split("/").pop(), mod: "review-file", props: { root: this.root, path, on: this.on ?? null, tab: true } });
+    run("tab.new", { name: path.split("/").pop(), mod: "review-file", props: { root: this.root, path, on: this.on ?? null, tab: true, mode: "review" } });
   }
 
   commit(cx) {
@@ -350,6 +352,7 @@ export default class Changes extends View {
         const parts = f.path.split("/"), name = parts.pop();
         return h_flex().id(`change-${f.path}`).h(28).flex_none().px(8).gap(8).items_center().rounded(7).cursor_pointer().when(this.open === f.path, (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover)).on_click((e, cx) => e.click_count >= 2 ? this.openFull(f.path) : this.pick(f.path, cx))
           .child(div().w(14).text_size(11).text_color(f.status === "A" ? t.ansi2 : f.status === "D" ? t.ansi1 : f.status === "U" ? t.ansi1 : t.blocked).child(f.status))
+          .child(svg(fileIcon(f.path).icon).size(14).flex_none().text_color(fileIcon(f.path).color))
           .child(h_flex().flex_1().min_w(0).child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : "")).child(div().max_w(260).min_w(0).truncate().child(name)))
           .when(f.add > 0, (e) => e.child(div().text_size(11).text_color(t.ansi2).child(`+${f.add}`))).when(f.del > 0, (e) => e.child(div().text_size(11).text_color(t.ansi1).child(`−${f.del}`)))
           .child(div().id(`full-${f.path}`).w(18).h(18).flex().flex_none().items_center().justify_center().rounded(4).text_size(12).text_color(t.dim).cursor_pointer()
