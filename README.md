@@ -244,6 +244,10 @@ The new arrangement is saved to your layout and comes back next time.
 
 <kbd>Alt</kbd> <kbd>Space</kbd> opens a search across the whole app: your sessions, the repo's files, every command (with its shortcut), the settings and the notifications. <kbd>Ctrl</kbd> <kbd>F</kbd> (or <kbd>Tab</kbd> in the box) searches inside the code instead, with match case, regular expressions, and a chip for "this file" or "whole repo". In a folder that holds many projects, it searches each git repo inside it.
 
+### Space icons and the space menu
+
+Right-click a space for **New tab**, **New terminal**, **Rename**, **Change icon…** and **Colour…**. Change icon opens an emoji picker (search by name, groups, recently used) whose emoji then stands in for the space's letter in Sessions and the space picker. Emoji names come from [unicode-emoji-json](https://github.com/muan/unicode-emoji-json) by Mu-An Chiou (MIT).
+
 ### Colours, so you can tell sessions apart
 
 <img src="docs/screens/colours.png" alt="The session colour picker" width="280" align="right">

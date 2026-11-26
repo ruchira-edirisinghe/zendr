@@ -540,7 +540,7 @@ export default class Spaces extends View {
   menu(w) {
     // A popup is as tall as its items; height is only the most.
     // review-menu: the space menu, with Colour….
-    openOverlay({ mod: "review-menu", kind: "popup", width: 220, height: 290, props: { tab: "space", target: { id: w.id } } });
+    openOverlay({ mod: "review-menu", kind: "popup", width: 220, height: 350, props: { tab: "space", target: { id: w.id } } });
   }
 
   orderingDue(now) {
@@ -768,7 +768,7 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(20).flex_none().rounded(6).bg(fill).items_center().justify_center().text_size(11).font_bold().text_color("#ffffff").child(spaceAvatar(w.name))))
+          .when(!tree, el => el.child(h_flex().size(20).flex_none().rounded(6).bg(fill).items_center().justify_center().text_size(11).font_bold().text_color("#ffffff").child((shared("space.icons") ?? {})[w.id] ?? spaceAvatar(w.name))))
           .child(div().flex_initial().min_w(SIDE_MIN).truncate().text_size(13.5).font_medium().text_color(t.foreground).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
           .when(nest && (folded || feature("session_counts")), el => el.child(div().flex_none().min_w(18).h(18).px(5).rounded(9).flex().items_center().justify_center()

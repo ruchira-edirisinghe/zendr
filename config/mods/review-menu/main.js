@@ -88,7 +88,10 @@ function items(p, git) {
       ];
     case "space":
       return [
+        ["New tab", "tab.new", { space: tg.id }],
+        ["New terminal", "space.terminal", { space: tg.id }],
         ["Rename", "space.rename", { id: tg.id }],
+        ["Change icon…", "icon", { id: tg.id, name: spaces().find((s) => s.id === tg.id)?.name }],
         ...(features().session_colors === false ? [] : [["Colour…", "color", { kind: "space", id: tg.id, name: spaces().find((s) => s.id === tg.id)?.name }]]),
         ...(git ? [["New worktree", "worktree", { space: tg.id, action: "new" }], ["Open worktree", "worktree", { space: tg.id, action: "open" }]] : []),
         ...(git === "linked" ? [["Remove worktree", "worktree", { space: tg.id, action: "remove" }]] : []),
@@ -109,6 +112,8 @@ function items(p, git) {
 function menuIcon(command, args) {
   if (command === "layout.show" || command === "layout.hide") return `mods/workspace-chrome/${command === "layout.hide" ? "minus" : (VIEWS.find(([id]) => id === args?.id)?.[2] ?? "square")}.svg`;
   if (command === "color") return "mods/session-color/palette.svg";
+  if (command === "icon") return "mods/space-icon/smile.svg";
+  if (command === "space.terminal") return "mods/workspace-chrome/terminal.svg";
   const name = command.endsWith(".close") ? "x" : command.endsWith(".rename") ? "square-pen" : command.endsWith(".new") ? "plus" : command === "worktree" ? "git-branch" : command === "app.help" ? "terminal" : command === "app.theme" ? "settings" : command === "pane.split" ? (args?.direction === "down" ? "panel-bottom" : "panel-right") : command === "pane.zoom" ? "square" : "terminal";
   return `mods/workspace-chrome/${name}.svg`;
 }
@@ -119,6 +124,18 @@ function shortcut(name, args) {
   const value = args && Object.values(args)[0];
   const k = keys().find((b) => b.section === "global" && (b.action === name || b.action === `${name}:${value}`));
   return k ? k.keys : "";
+}
+
+// A new terminal in a space: beside the first terminal of the tab it shows (a new tab
+// when it has none), after bringing the space up.
+function newTerminal(spaceId) {
+  const space = spaces().find((s) => s.id === spaceId);
+  if (!space) return;
+  const tab = space.tabs.find((t) => t.active) ?? space.tabs[0];
+  const pane = tab && panes().find((p) => p.tab === tab.id && p.terminal);
+  if (!space.active) run("space.select", { id: space.id });
+  if (pane) run("pane.split", { direction: "right", pane: pane.pane });
+  else run("tab.new", { space: space.id });
 }
 
 export default class Menu extends View {
@@ -143,6 +160,8 @@ export default class Menu extends View {
     closeOverlay(props()?.overlay);
     if (it[1] === "worktree") openOverlay({ mod: "worktree", kind: "dialog", ...(it[2].action === "open" ? { width: 560, height: 480 } : { width: 440, height: 260 }), props: it[2] });
     else if (it[1] === "color") openOverlay({ mod: "session-color", kind: "popup", width: 268, props: it[2] });
+    else if (it[1] === "icon") openOverlay({ mod: "space-icon", kind: "popup", width: 360, height: 430, props: it[2] });
+    else if (it[1] === "space.terminal") newTerminal(it[2].space);
     else run(it[1], it[2]);
   }
 
