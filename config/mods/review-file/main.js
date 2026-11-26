@@ -1404,6 +1404,7 @@ export default class ReviewFile extends View {
       .child(h_flex().flex_none().px(6).gap(2).items_center().border_l(1).border_color(t.border)
         .child(action("rf-open", ICON("search"), "Quick open a file (Ctrl+P)", cx => this.openPalette("files", cx)))
         .child(action("rf-split", ICON("split"), "Split the editor: this file in another code view (Ctrl+\\)", () => this.splitEditor()))
+        .child(action("rf-vscode", ICON("puzzle"), "VS Code extensions: themes, code colours and file types", () => run("mod.open", { name: "vscode" })))
         .child(action("rf-keys", ICON("keyboard"), "Keyboard shortcuts (F1)", cx => { this.showKeys = !this.showKeys; cx.notify(); })));
   }
 

@@ -1,0 +1,8 @@
+{
+  "place": "none",
+  "title": "VS Code extensions",
+  "overlay": { "kind": "dialog", "width": 760, "height": 640 },
+  "palette": [
+    { "title": "VS Code extensions: themes, code colours and file types", "command": "mod.open", "args": { "name": "vscode" }, "words": "vscode visual studio code extensions themes colors languages import" }
+  ]
+}
