@@ -14,7 +14,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -84,9 +83,6 @@ class FlowTest {
         server.shutdown()
     }
 
-    private fun shown(text: String) =
-        compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
-
     private fun waitForText(text: String, ms: Long = 15_000) =
         compose.waitUntil(ms) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
 
@@ -107,15 +103,11 @@ class FlowTest {
             compose.onAllNodesWithText("Esc").onFirst().performClick()
             compose.waitUntil(10_000) { received.any { it.startsWith("/api/keys") && it.contains("esc") } }
 
-            // Back to the computers: it's listed and remembered. (The keyboard is still up from
-            // the reply, and Back closes it first, so step back until the home screen shows.)
-            Espresso.closeSoftKeyboard()
-            repeat(3) {
-                if (!shown("Alert me")) {
-                    Espresso.pressBack()
-                    compose.waitForIdle()
-                }
-            }
+            // Back to the computers with the app's own back arrows (terminal, then sessions):
+            // it's listed and remembered.
+            compose.onNodeWithContentDescription("Back").performClick()
+            waitForText("Needs you")
+            compose.onNodeWithContentDescription("Back").performClick()
             waitForText("Alert me")
             waitForText("TEST-PC")
             assertTrue(Store(context).computers().single().name == "TEST-PC")
