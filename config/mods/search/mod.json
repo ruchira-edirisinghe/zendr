@@ -1,0 +1,8 @@
+{
+  "place": "none",
+  "title": "Search",
+  "palette": [
+    { "title": "Search everything: sessions, files, commands, settings (Alt+Space)", "command": "review-tabs.search", "args": {}, "words": "universal search find everything go to anything" },
+    { "title": "Search the code in this repo (Ctrl+F)", "command": "review-tabs.code-search", "args": {}, "words": "grep find in files text code search" }
+  ]
+}

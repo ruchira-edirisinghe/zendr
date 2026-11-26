@@ -237,7 +237,7 @@ const byName = (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" });
 // The shortcuts sheet (F1), in groups.
 const SHORTCUTS = [
   ["Files", [["Ctrl+P", "Quick open a file"], ["Ctrl+W", "Close the tab"], ["Ctrl+\\", "Split the editor"], ["Ctrl+B", "Show or hide the files"]]],
-  ["Editing", [["Ctrl+S", "Save"], ["Ctrl+E", "Switch Review / Edit"], ["Ctrl+F", "Find"], ["Ctrl+H", "Replace"], ["Ctrl+/", "Comment the lines"], ["Ctrl+G", "Go to line"], ["Ctrl+Z / Ctrl+Y", "Undo / redo"], ["Ctrl+Alt+↑ ↓", "Add a cursor"], ["Tab / Shift+Tab", "Indent / outdent"], ["Alt+Z", "Wrap long lines"]]],
+  ["Editing", [["Ctrl+S", "Save"], ["Ctrl+E", "Switch Review / Edit"], ["Ctrl+F", "Search code (this file first)"], ["Ctrl+Shift+F", "Find in this file"], ["Ctrl+H", "Replace"], ["Ctrl+/", "Comment the lines"], ["Ctrl+G", "Go to line"], ["Ctrl+Z / Ctrl+Y", "Undo / redo"], ["Ctrl+Alt+↑ ↓", "Add a cursor"], ["Tab / Shift+Tab", "Indent / outdent"], ["Alt+Z", "Wrap long lines"]]],
   ["Reviewing", [["N or F7", "Next change"], ["P or Shift+F7", "Previous change"], ["C", "Only the changed parts"], ["E", "Show or hide the files"]]],
   ["View", [["Ctrl+wheel", "Zoom the code in or out"], ["F1", "This sheet"], ["Esc", "Close a box"]]],
 ];
@@ -1047,7 +1047,9 @@ export default class ReviewFile extends View {
   // ---- Boxes over the code: quick open, go to line, find, language. ----
   openPalette(kind, cx) {
     if (this.part === "explorer") return;
-    if (kind === "find" && this.mode === "edit") { this.focusEditor(this.current, cx); this.flash("Press Ctrl+F again to search in the editor"); return; }
+    // The editor has its own find box, but keys.json's "input" section gives ctrl-f to the code
+    // search, so finding while editing goes there too, starting on this file.
+    if (kind === "find" && this.mode === "edit") { setShared("search.want", { scope: "file", at: Date.now() }); run("review-tabs.code-search"); return; }
     if ((kind === "line" || kind === "find" || kind === "lang") && !this.current) return;
     this.palette?.input?.release();
     const placeholder = { files: "Search files by name", line: `Go to line (1 to ${this.lineCount()}), or line:column`, find: "Find in this file", lang: "Pick the language" }[kind];
@@ -1484,7 +1486,7 @@ export default class ReviewFile extends View {
       if (mode === "edit") left.child(item("rf-pos", tab.cursor ? `Ln ${tab.cursor.line}, Col ${tab.cursor.col}${tab.selected ? ` (${tab.selected} selected)` : ""}` : "Ln 1, Col 1", "Go to line (Ctrl+G)", cx => this.openPalette("line", cx)));
       else left.child(item("rf-change", this.hunks.length ? `Change ${this.at >= 0 ? this.at + 1 : "–"} of ${this.hunks.length}` : "No changes", "Next change (N or F7)", cx => this.step(1, cx)));
       if (lines && roomy) left.child(item("rf-lines", `${lines.toLocaleString()} lines`, null, null, t.dim));
-      if (this.find?.query && mode === "review") left.child(item("rf-find", `${this.find.hits?.length ? this.find.at + 1 : 0}/${this.find.hits?.length ?? 0} found`, "Find (Ctrl+F)", cx => this.openPalette("find", cx)));
+      if (this.find?.query && mode === "review") left.child(item("rf-find", `${this.find.hits?.length ? this.find.at + 1 : 0}/${this.find.hits?.length ?? 0} found`, "Find (Ctrl+Shift+F)", cx => this.openPalette("find", cx)));
     } else if ((shared("zendr.features") ?? {}).hints !== false) left.child(div().px(12).text_color(t.dim).truncate().child("Ctrl+P opens a file · F1 lists the shortcuts"));
     const right = h_flex().h_full().items_center().flex_none();
     if (tab?.editor && mode === "edit") {
@@ -1596,7 +1598,7 @@ export default class ReviewFile extends View {
       "ctrl-s": () => this.save(cx), "ctrl-p": () => this.openPalette("files", cx), "ctrl-g": () => this.openPalette("line", cx),
       "ctrl-w": () => this.current && this.closeTab(this.current, cx), "ctrl-/": () => this.toggleComment(), "alt-z": () => this.toggleWrap(cx),
       "f1": () => { this.showKeys = true; }, "ctrl-e": () => this.setMode(mode === "edit" ? "review" : "edit", cx),
-      "ctrl-f": () => this.openPalette("find", cx), "ctrl-\\": () => this.splitEditor(), "ctrl-b": () => this.toggleExplorer(),
+      "ctrl-f": () => { setShared("search.want", { scope: "file", at: Date.now() }); run("review-tabs.code-search"); }, "ctrl-shift-f": () => this.openPalette("find", cx), "ctrl-\\": () => this.splitEditor(), "ctrl-b": () => this.toggleExplorer(),
       "ctrl-alt-pagedown": () => this.cycleTab(1, cx), "ctrl-alt-pageup": () => this.cycleTab(-1, cx),
     };
     if (global[k]) { global[k](); return done(); }

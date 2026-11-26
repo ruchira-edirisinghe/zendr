@@ -5,6 +5,11 @@
     "ctrl-shift-y": "review-tabs.color",
     "ctrl-shift-r": "review-tabs.command-search",
     "ctrl-shift-space": "review-tabs.ask-ai",
-    "ctrl-shift-j": "review-tabs.launch"
+    "ctrl-shift-j": "review-tabs.launch",
+    "alt-space": "review-tabs.search",
+    "ctrl-f": "review-tabs.code-search"
+  },
+  "input": {
+    "ctrl-f": "review-tabs.code-search"
   }
 }

@@ -6,7 +6,7 @@
 // Commands (keys.json): review-tabs.inbox, review-tabs.jump-unread, review-tabs.color (colour this session).
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, ScrollHandle } from "gpui-base";
-import { spaces, panes, agents, terminals, hc, notify, run, openOverlay, theme, window, shared, setShared, layout, settings, nextCommand, appHome, readTextFile, focused } from "herdr";
+import { spaces, panes, agents, terminals, hc, notify, run, openOverlay, closeOverlay, theme, window, shared, setShared, layout, settings, nextCommand, appHome, readTextFile, focused } from "herdr";
 
 // A session's own colour (mods/session-color), by terminal address.
 const SESSION_HEX = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
@@ -39,6 +39,23 @@ function jumpUnread() {
 
 // Settings → Features (settings.json `features`): each on unless turned off.
 const feature = (id) => (shared("zendr.features") ?? {})[id] !== false;
+
+// Search (mods/search): everything (Alt+Space) or the code (Ctrl+F). Pressing the same
+// key again while it's open closes it.
+function openSearch(mode) {
+  // The code view asks for "This file" first (commands carry no arguments).
+  const want = shared("search.want");
+  const scope = want && Date.now() - want.at < 1000 ? want.scope : undefined;
+  setShared("search.want", null);
+  // The popup beats every 500 ms while it's open (a click outside closes it without a word).
+  const open = shared("search.open");
+  if (open && Date.now() - open.alive < 1500) {
+    closeOverlay(open.id);
+    setShared("search.open", null);
+    if (open.mode === mode) return;
+  }
+  openOverlay({ mod: "search", kind: "popup", at: "top", offset: 56, width: 720, height: 0.8, props: { mode, scope } });
+}
 
 // Command search and Ask AI (mods/commands), for the focused terminal.
 function openCommands(mode) {
@@ -105,6 +122,7 @@ export default class Tabs extends View {
         else if (command === "color") pickFocusedColor();
         else if (command === "command-search") openCommands("history");
         else if (command === "ask-ai") openCommands("ai");
+        else if (command === "search" || command === "code-search") openSearch(command === "code-search" ? "code" : "all");
         else if (command === "launch") { if (feature("launch_configs")) openOverlay({ mod: "launch", kind: "dialog", width: 520, height: 460 }); }
         cx.notify();
       }

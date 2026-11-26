@@ -205,7 +205,8 @@ Click **Explorer** and **Code** in the toolbar, and the space becomes a small ID
 | --- | --- |
 | <kbd>Ctrl</kbd> <kbd>P</kbd> | Quick open a file (`:42` goes to a line, `>` runs an editor command) |
 | <kbd>Ctrl</kbd> <kbd>G</kbd> | Go to line |
-| <kbd>Ctrl</kbd> <kbd>F</kbd> / <kbd>Ctrl</kbd> <kbd>H</kbd> | Find / replace |
+| <kbd>Ctrl</kbd> <kbd>F</kbd> | Search the code, starting on this file (a chip widens it to the whole repo) |
+| <kbd>Ctrl</kbd> <kbd>H</kbd> | Replace |
 | <kbd>Ctrl</kbd> <kbd>/</kbd> | Comment or uncomment the lines |
 | <kbd>Ctrl</kbd> <kbd>]</kbd> / <kbd>[</kbd> | Indent / outdent |
 | <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>↑</kbd> / <kbd>↓</kbd> | Add a cursor above / below |
@@ -238,6 +239,10 @@ Want the drawer below the terminals instead of beside them? Click **Arrange bloc
 - <kbd>Esc</kbd> or **Done** when you're finished
 
 The new arrangement is saved to your layout and comes back next time.
+
+### One search for everything
+
+<kbd>Alt</kbd> <kbd>Space</kbd> opens a search across the whole app: your sessions, the repo's files, every command (with its shortcut), the settings and the notifications. <kbd>Ctrl</kbd> <kbd>F</kbd> (or <kbd>Tab</kbd> in the box) searches inside the code instead, with match case, regular expressions, and a chip for "this file" or "whole repo". In a folder that holds many projects, it searches each git repo inside it.
 
 ### Colours, so you can tell sessions apart
 
@@ -290,6 +295,8 @@ Right-click a session, a tab or a hub card, or press <kbd>Ctrl</kbd> <kbd>Shift<
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>I</kbd> | Notifications drawer |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>U</kbd> | Jump to the newest unread |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Y</kbd> | Colour the session you're in |
+| <kbd>Alt</kbd> <kbd>Space</kbd> | Search everything: sessions, files, commands, settings, notifications |
+| <kbd>Ctrl</kbd> <kbd>F</kbd> | Search the code of the repo you're in (<kbd>Tab</kbd> switches between the two) |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>R</kbd> | Command search |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Space</kbd> | Ask AI for a command |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>J</kbd> | Launch configurations |
