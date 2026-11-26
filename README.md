@@ -193,6 +193,7 @@ flowchart LR
 Click **Explorer** and **Code** in the toolbar, and the space becomes a small IDE built for working alongside an agent:
 
 - a **VS Code-style explorer** with the repo's changed files on top and the full tree below, each file with a **Seti-style icon** for its type
+- a **Changes** panel on the right, for staging and committing; its toolbar button shows or hides it, and each space remembers your choice
 - **tabs**: a single click previews a file, a double click (or an edit) keeps it open
 - **Review** mode shows each file whole with its changes inline: removed lines in red, a ruler beside the scrollbar, <kbd>N</kbd> / <kbd>P</kbd> (or <kbd>F7</kbd>) to jump between changes and **Changes only** to fold the rest away
 - **Edit** mode is a real editor: <kbd>Ctrl</kbd> <kbd>S</kbd> saves (line endings kept), and if the agent changes the file meanwhile you choose whose version wins

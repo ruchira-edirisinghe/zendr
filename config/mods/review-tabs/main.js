@@ -271,8 +271,8 @@ export default class Tabs extends View {
         const stored = this.panels[space.id] ?? null, want = enabled.includes(stored) ? stored : null;
         if (want !== now) {
           this.pending = { want, until: Date.now() + 1000 };
-          if (want) { run("layout.select", { stack: "panel-body", child: want }); run("layout.show", { id: "panel" }); }
-          else run("layout.hide", { id: "panel" });
+          if (want) { run("layout.select", { stack: "panel-body", child: want }); run("layout.show", { id: panel.id }); }
+          else run("layout.hide", { id: panel.id });
           return;
         }
       }
@@ -362,8 +362,12 @@ export default class Tabs extends View {
     const lightsPadding = w?.platform === "macos" && w.titlebar === "none" && !w.fullscreen && root?.traffic_lights
       ? Math.max(10, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 10;
-    const panel = find(root, "panel"), body = find(root, "panel-body");
-    const enabled = shared("workspace.panels") ?? ["files", "changes"];
+    // The code review layout has no "panel" around its stack: the stack itself shows and hides.
+    const body = find(root, "panel-body"), panel = find(root, "panel") ?? body;
+    // The welcome's choice of panels, plus Changes whenever the layout has it: its toolbar
+    // toggle is how it's hidden or shown.
+    const welcome = shared("workspace.panels") ?? ["files", "changes"];
+    const enabled = find(root, "changes") && !welcome.includes("changes") ? [...welcome, "changes"] : welcome;
     const unread = (shared("inbox.log") ?? []).filter(e => !e.read).length;
     const badge = prefs().badge ?? "count", quiet = (prefs().quiet_until ?? 0) > Date.now();
     this.syncPanel(space, panel, body, enabled);
@@ -379,8 +383,8 @@ export default class Tabs extends View {
     const panelButton = (id, label, icon) => {
       const on = Boolean(panel && !panel.hidden && body?.active === id);
       return toggle(`panel-${id}`, icon, label, on, `Show or hide the ${label} panel`, () => {
-        if (on) run("layout.hide", { id: "panel" });
-        else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
+        if (on) run("layout.hide", { id: panel.id });
+        else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: panel.id }); }
       });
     };
     return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome).border_b(1).border_color(t.border)
