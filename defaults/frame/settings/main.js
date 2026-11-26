@@ -5,6 +5,7 @@ import { v_flex, h_flex, Scrollbar, InputState, Input, Popup } from "gpui-base";
 import { exec, hc, run, theme, themes, fonts, updates, telemetry, settings, layouts, shared, setShared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, notify, window } from "herdr";
 
 import { addonMethods } from "./addons.js";
+import { phoneMethods } from "./phone.js";
 
 const I = (name) => `frame/settings/${name}.svg`;
 
@@ -16,6 +17,7 @@ const SECTIONS = [
   { id: "addons", title: "Add-ons", icon: "blocks" },
   ...(window()?.platform === "macos" ? [{ id: "keyboard", title: "Keyboard", icon: "keyboard" }] : []),
   { id: "machines", title: "Machines", icon: "server" },
+  { id: "phone", title: "Phone", icon: "phone" },
   { id: "alerts", title: "Notifications", icon: "bell" },
   { id: "updates", title: "Updates", icon: "refresh" },
   { id: "privacy", title: "Privacy", icon: "shield" },
@@ -145,6 +147,7 @@ export default class Settings extends View {
       if (this.section === "machines") await this.loadMachines();
       if (this.section === "claude") await this.loadClaude();
       if (this.section === "claude-tools" || this.section === "addons") await this.loadAddons();
+      if (this.section === "phone") this.loadPhone();
       cx.notify();
     });
     // After "Check now": follow the look (the answer comes from the app), then
@@ -1364,6 +1367,7 @@ export default class Settings extends View {
               if (s.id === "machines") cx.spawn(async (cx) => { await this.loadMachines(); cx.notify(); });
               if (s.id === "claude") cx.spawn(async (cx) => { await this.loadClaude(); cx.notify(); });
               if (s.id === "claude-tools" || s.id === "addons") cx.spawn(async (cx) => { await this.loadAddons(); cx.notify(); });
+              if (s.id === "phone") this.loadPhone();
               cx.notify();
             })
             .child(svg(I(s.icon)).size(15).text_color(on ? t.accent : t.dim))
@@ -1437,6 +1441,8 @@ export default class Settings extends View {
                         ? this.addonsPage(t, "claude")
                       : this.section === "addons"
                         ? this.addonsPage(t, "general")
+                      : this.section === "phone"
+                        ? this.phonePage(t)
                       : this.section === "alerts"
                         ? this.alerts(t)
                         : this.section === "privacy"
@@ -1450,4 +1456,4 @@ export default class Settings extends View {
   }
 }
 
-Object.assign(Settings.prototype, addonMethods);
+Object.assign(Settings.prototype, addonMethods, phoneMethods);

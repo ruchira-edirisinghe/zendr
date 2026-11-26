@@ -3766,6 +3766,9 @@ impl AppWindow {
                     return self.fail(format!("no stack {s:?} with a child {ch:?}"));
                 }
             }
+            "remote.pair" => self.answer(crate::remote::pair(a)),
+            "remote.stop" => self.answer(crate::remote::stop()),
+            "remote.status" => self.answer(Ok(crate::remote::publish_status())),
             "mod.open" => {
                 let name = Self::arg(a, "name").unwrap_or_default();
                 let Some(f) = self.view_mod(name) else { return self.fail(format!("no mod folder {name:?}")) };
