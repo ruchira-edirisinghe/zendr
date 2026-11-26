@@ -84,6 +84,9 @@ class FlowTest {
         server.shutdown()
     }
 
+    private fun shown(text: String) =
+        compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
+
     private fun waitForText(text: String, ms: Long = 15_000) =
         compose.waitUntil(ms) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
 
@@ -104,9 +107,16 @@ class FlowTest {
             compose.onAllNodesWithText("Esc").onFirst().performClick()
             compose.waitUntil(10_000) { received.any { it.startsWith("/api/keys") && it.contains("esc") } }
 
-            // Back to the computers: it's listed and remembered.
-            Espresso.pressBack()
-            Espresso.pressBack()
+            // Back to the computers: it's listed and remembered. (The keyboard is still up from
+            // the reply, and Back closes it first, so step back until the home screen shows.)
+            Espresso.closeSoftKeyboard()
+            repeat(3) {
+                if (!shown("Alert me")) {
+                    Espresso.pressBack()
+                    compose.waitForIdle()
+                }
+            }
+            waitForText("Alert me")
             waitForText("TEST-PC")
             assertTrue(Store(context).computers().single().name == "TEST-PC")
 
