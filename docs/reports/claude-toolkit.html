@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zendr Claude Toolkit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single reading column (max 1080px) with a two-column tool grid; app mock-ups drawn in CSS in Zendr's own dark chrome. */
+:root {
+  --bg: #f6f8f7; --surface: #ffffff; --sunk: #eef2f0; --fg: #17201c; --muted: #5d6b65; --line: #d9e1dd;
+  --accent: #1f8f68; --accent-soft: #dcf1e8; --warn: #a86a00; --warn-soft: #fbefd6; --bad: #c2412d;
+  --app: #16191b; --app-2: #1e2225; --app-3: #2a2f33; --app-fg: #e6ebe8; --app-mut: #8a948f; --app-acc: #3fbf8f;
+  --t1: #1f8f68; --t2: #3b6fb6; --t3: #7a7f86;
+  --sans: "Geist", "Segoe UI", system-ui, sans-serif; --mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111513; --surface: #181d1b; --sunk: #1d2320; --fg: #e4ebe7; --muted: #94a29b; --line: #2b3430;
+  --accent: #4cc797; --accent-soft: #173327; --warn: #e0a640; --warn-soft: #33270f; --bad: #ef7a64;
+  --app: #0d0f10; --app-2: #161a1c; --app-3: #23292c; --t1: #4cc797; --t2: #7aa7e6; --t3: #8f959c; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111513; --surface: #181d1b; --sunk: #1d2320; --fg: #e4ebe7; --muted: #94a29b; --line: #2b3430;
+  --accent: #4cc797; --accent-soft: #173327; --warn: #e0a640; --warn-soft: #33270f; --bad: #ef7a64;
+  --app: #0d0f10; --app-2: #161a1c; --app-3: #23292c; --t1: #4cc797; --t2: #7aa7e6; --t3: #8f959c; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--sans); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 40px 80px; display: grid; gap: 56px }
+a { color: var(--accent); text-underline-offset: 2px }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px }
+h1, h2, h3 { text-wrap: balance; line-height: 1.2; margin: 0 }
+h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 700; letter-spacing: -0.02em }
+h2 { font-size: 24px; font-weight: 650; letter-spacing: -0.01em }
+h3 { font-size: 17px; font-weight: 600 }
+p { margin: 0 }
+code { font: 13px var(--mono); background: var(--sunk); padding: 1px 5px; border-radius: 4px }
+.eyebrow { font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+.lede { font-size: 18px; color: var(--muted); max-width: 64ch; margin-top: 14px }
+
+/* hero */
+.hero { display: grid; gap: 28px }
+.stats { display: flex; flex-wrap: wrap; gap: 10px 28px; font-variant-numeric: tabular-nums }
+.stats div { display: grid }
+.stats b { font: 600 28px var(--sans); letter-spacing: -0.02em }
+.stats span { color: var(--muted); font-size: 13px }
+
+/* callout */
+.callout { background: var(--accent-soft); border-radius: 12px; padding: 22px 24px; display: grid; gap: 10px }
+.callout h2 { font-size: 19px }
+.callout p { max-width: 75ch }
+
+/* two-up explainer */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 32px; align-items: start }
+@media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr) } }
+.steps { display: grid; gap: 14px; margin: 18px 0 0; padding: 0; list-style: none; counter-reset: s }
+.steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; counter-increment: s }
+.steps li::before { content: counter(s); width: 26px; height: 26px; border-radius: 50%; background: var(--fg); color: var(--bg); display: grid; place-items: center; font: 600 13px var(--mono) }
+.steps b { display: block }
+.steps span { color: var(--muted); font-size: 14px }
+
+/* app mock-ups (always Zendr's dark chrome) */
+.app { background: var(--app); color: var(--app-fg); border-radius: 12px; border: 1px solid var(--app-3); overflow: hidden; font-size: 13px; box-shadow: 0 18px 40px -24px rgba(0,0,0,.55) }
+.app .bar { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: var(--app-2); border-bottom: 1px solid var(--app-3); color: var(--app-mut); font-size: 12px }
+.app .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--app-3) }
+.set { display: grid; grid-template-columns: 150px minmax(0, 1fr) }
+@media (max-width: 520px) { .set { grid-template-columns: minmax(0, 1fr) } .set nav { display: none } }
+.set nav { background: var(--app-2); padding: 10px 8px; display: grid; gap: 2px; align-content: start; border-right: 1px solid var(--app-3) }
+.set nav span { padding: 6px 9px; border-radius: 6px; color: var(--app-mut) }
+.set nav span.on { background: var(--app-3); color: var(--app-fg) }
+.set .pane { padding: 14px; display: grid; gap: 10px; min-width: 0 }
+.set .pane h4 { margin: 0; font-size: 15px }
+.set .pane > p { color: var(--app-mut); font-size: 12px }
+.opt { background: var(--app-2); border: 1px solid var(--app-3); border-radius: 9px; padding: 11px 12px; display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 12px; align-items: center }
+.opt .pic { height: 40px; border-radius: 6px; background: var(--app-3); position: relative; overflow: hidden }
+.opt .pic i { position: absolute; left: 6px; right: 6px; height: 5px; border-radius: 3px; background: var(--app-acc); opacity: .85 }
+.opt b { display: block; font-weight: 600 }
+.opt small { color: var(--app-mut); display: block; line-height: 1.4 }
+.opt small em { font-style: normal; color: var(--app-acc) }
+.sw { width: 34px; height: 20px; border-radius: 10px; background: var(--app-3); position: relative; flex: none }
+.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--app-mut) }
+.sw.on { background: var(--app-acc) } .sw.on::after { left: 17px; background: #fff }
+
+/* small mock gallery */
+.mocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px }
+@media (max-width: 760px) { .mocks { grid-template-columns: minmax(0, 1fr) } }
+figure { margin: 0; display: grid; gap: 10px }
+figcaption { color: var(--muted); font-size: 13px }
+.status { display: flex; align-items: center; gap: 16px; padding: 10px 12px; font: 12px var(--mono); flex-wrap: wrap }
+.meter { display: grid; gap: 4px; min-width: 120px; flex: 1 }
+.meter .row { display: flex; justify-content: space-between; color: var(--app-mut) }
+.meter .row b { color: var(--app-fg); font-weight: 500 }
+.track { height: 6px; border-radius: 3px; background: var(--app-3); position: relative }
+.track .fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px }
+.track .pace { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--app-fg); opacity: .7 }
+.tree { padding: 10px 12px; display: grid; gap: 4px }
+.tree .r { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; min-width: 0 }
+.tree .r.top { background: var(--app-2) }
+.tree .r span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0 }
+.tree .r em { margin-left: auto; font-style: normal; font-size: 11px; color: var(--app-mut); flex: none }
+.tree .l1 { padding-left: 26px } .tree .l2 { padding-left: 46px }
+.pill { width: 8px; height: 8px; border-radius: 50%; flex: none }
+.g { background: var(--app-acc) } .y { background: #e0a640 } .b { background: #6aa0ff } .z { background: var(--app-mut) }
+
+/* how list */
+.how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px }
+@media (max-width: 760px) { .how { grid-template-columns: minmax(0, 1fr) } }
+.how div { border-top: 2px solid var(--fg); padding-top: 12px; display: grid; gap: 6px }
+.how p { color: var(--muted); font-size: 14px }
+
+/* first wave */
+.wave { list-style: none; padding: 0; margin: 16px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px }
+.wave li { display: flex; justify-content: space-between; gap: 10px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px }
+.wave li span { color: var(--muted); font-size: 13px }
+
+/* filters */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; position: sticky; top: env(safe-area-inset-top, 0px); background: var(--bg); padding-block: 10px; z-index: 5 }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg) }
+.filters button { font: 500 13px var(--sans); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer }
+.filters button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg) }
+
+/* groups and cards */
+.groups { display: grid; gap: 44px }
+.ghead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 18px }
+.ghead p { color: var(--muted) }
+.ghead .count { margin-left: auto; font: 500 12px var(--mono); color: var(--muted) }
+.tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px }
+@media (max-width: 760px) { .tools { grid-template-columns: minmax(0, 1fr) } }
+.tool { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 12px; align-content: start; min-width: 0 }
+.tool header { display: flex; align-items: flex-start; gap: 10px }
+.tool .tier { margin-left: auto; font: 500 11px var(--mono); letter-spacing: .04em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; border: 1px solid currentColor; flex: none }
+.t1 { color: var(--t1) } .t2 { color: var(--t2) } .t3 { color: var(--t3) }
+.tool .what { font-size: 14.5px }
+.tool .why { font-size: 14px; color: var(--muted) }
+.tool .why b { color: var(--fg); font-weight: 600; margin-right: 4px }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; font-size: 13px }
+.facts div { display: flex; gap: 6px; align-items: baseline }
+.facts dt { color: var(--muted) } .facts dd { margin: 0 }
+.credit { list-style: none; padding: 10px 0 0; margin: 0; border-top: 1px dashed var(--line); display: grid; gap: 4px; font-size: 13px }
+.credit li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
+.credit li::before { content: "by"; color: var(--muted) }
+.lic { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px }
+.lic.ok { background: var(--accent-soft); color: var(--accent) }
+.lic.warn { background: var(--warn-soft); color: var(--warn) }
+.gal { color: var(--muted); font-size: 12px }
+.tool[hidden] { display: none }
+
+.already { list-style: none; padding: 0; margin: 16px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px 24px }
+.already li { display: grid; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px }
+.already span, .already i { color: var(--muted); font-size: 13px; font-style: normal }
+.credits p { color: var(--muted); max-width: 80ch; margin-top: 10px }
+.credits p a { color: var(--fg) }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important } }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Report · herdr gallery, 26 Nov 2026</p>
+      <h1>Claude tools worth bringing into Zendr</h1>
+      <p class="lede">I read every mod in the herdr gallery and kept the ones that make working with Claude Code faster or safer. Each pick below says what it does, why it fits Zendr, how it would arrive, and who made it. Every one gets its own on/off switch in Settings.</p>
+    </div>
+    <div class="stats">
+      <div><b>557</b><span>mods in the gallery</span></div>
+      <div><b>99</b><span>mention Claude</span></div>
+      <div><b>26</b><span>tools picked</span></div>
+      <div><b>10</b><span>in the first wave</span></div>
+      <div><b>42</b><span>people credited</span></div>
+    </div>
+  </header>
+
+  <section class="callout" aria-labelledby="mobile">
+    <p class="eyebrow">Found while reading the gallery</p>
+    <h2 id="mobile">Herdr already has a free Android and iPhone app</h2>
+    <p>The official <a href="https://herdr.dev/mobile/">Herdr mobile app</a> (<a href="https://play.google.com/store/apps/details?id=dev.herdr.app">Google Play</a>, free, open source) talks to herdr-core over SSH, and Tailscale gets it there from anywhere. Zendr runs on herdr-core, so the phone app can see Zendr's terminals: an inbox of who needs you, the live terminal with Esc, Ctrl and arrow keys, a compose box with dictation, and your spaces.</p>
+    <p>That changes the remote-control plan. The quickest route is Tailscale plus the Windows SSH server plus this app, with no APK to build. The Zendr web app and the code-pairing for other PCs still add things it lacks: a Zendr-branded install, a pairing code instead of SSH keys, and sending prompts only while a session is live.</p>
+  </section>
+
+  <section class="split" aria-labelledby="choose">
+    <div>
+      <p class="eyebrow">How you would turn them on</p>
+      <h2 id="choose">One page in Settings: Claude tools</h2>
+      <p class="lede" style="font-size:16px">A new <b>Settings → Claude tools</b> page sits beside Features and Claude mods. Everything ships switched off, so Zendr stays as quiet as it is today until you choose.</p>
+      <ol class="steps">
+        <li><div><b>Browse by what you need</b><span>The page groups tools by job, like "Limits and cost" or "Never lose a conversation". Each card has a preview picture and two lines on what it does.</span></div></li>
+        <li><div><b>Flip the switch</b><span>The tool appears at once, with no restart. Its toolbar button, keys and panel all go away again when you switch it off.</span></div></li>
+        <li><div><b>Open its options</b><span>Tools with choices (which limits to show, the hibernate delay, an automation's schedule) open an options box under the card, like the Claude mods page.</span></div></li>
+        <li><div><b>See who made it</b><span>Every card names the original author with a link to their repo and its licence. The same credits go in Zendr's README and NOTICE file.</span></div></li>
+      </ol>
+    </div>
+    <figure>
+      <div class="app" role="img" aria-label="Mock-up of the Settings, Claude tools page with three tools and their switches">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="margin-left:6px">Settings</span></div>
+        <div class="set">
+          <nav><span>General</span><span>Appearance</span><span>Notifications</span><span>Features</span><span>Claude mods</span><span class="on">Claude tools</span><span>Remote</span></nav>
+          <div class="pane">
+            <h4>Limits and cost</h4>
+            <p>Know how much Claude you have left before you run out.</p>
+            <div class="opt"><div class="pic"><i style="top:12px;width:60%"></i><i style="top:23px;width:35%"></i></div><div><b>Claude limits strip</b><small>5-hour and weekly meters in the status bar. <em>By nozikov, dev-gvs, cunderw · MIT</em></small></div><span class="sw on"></span></div>
+            <div class="opt"><div class="pic"><i style="top:10px;width:30%;height:22px;opacity:.5"></i><i style="top:10px;left:24px;width:20%;height:22px"></i></div><div><b>Usage &amp; cost dashboard</b><small>Tokens and cost by day and model. <em>By GaganSD, JacobAtchley · MIT</em></small></div><span class="sw"></span></div>
+            <h4 style="margin-top:6px">Never lose a conversation</h4>
+            <div class="opt"><div class="pic"><i style="top:9px;width:80%;opacity:.4"></i><i style="top:18px;width:70%"></i><i style="top:27px;width:75%;opacity:.4"></i></div><div><b>Session search &amp; resume</b><small>Past Claude sessions in Alt+Space search. <em>By cunderw, ilstar, iml885203 · MIT</em></small></div><span class="sw on"></span></div>
+          </div>
+        </div>
+      </div>
+      <figcaption>Mock-up. Each card shows a preview, what the tool does, and who made it, with one switch.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="looks">
+    <p class="eyebrow">What two of the first wave look like</p>
+    <h2 id="looks">In the window</h2>
+    <div class="mocks" style="margin-top:18px">
+      <figure>
+        <div class="app" role="img" aria-label="Status bar mock-up with Claude 5-hour limit at 62 percent and weekly at 38 percent, each with a pace mark">
+          <div class="bar">Status bar</div>
+          <div class="status">
+            <div class="meter"><div class="row">Claude 5h <b>62% · resets 1h 40m</b></div><div class="track"><span class="fill y" style="width:62%"></span><span class="pace" style="left:55%"></span></div></div>
+            <div class="meter"><div class="row">Week <b>38% · 3d 4h</b></div><div class="track"><span class="fill g" style="width:38%"></span><span class="pace" style="left:52%"></span></div></div>
+          </div>
+        </div>
+        <figcaption><b>Claude limits strip.</b> The white tick is how much of the window has passed. A bar ahead of its tick means you will run out early.</figcaption>
+      </figure>
+      <figure>
+        <div class="app" role="img" aria-label="Sessions list mock-up showing a Claude session with two subagents and a background shell nested under it">
+          <div class="bar">Sessions</div>
+          <div class="tree">
+            <div class="r top"><span class="pill b"></span><span>Fix login redirect</span><em>working</em></div>
+            <div class="r l1"><span class="pill b"></span><span>Explore · find auth callers</span><em>subagent</em></div>
+            <div class="r l1"><span class="pill g"></span><span>Plan · migration steps</span><em>done</em></div>
+            <div class="r l2"><span class="pill y"></span><span>npm test (background)</span><em>waiting</em></div>
+            <div class="r top"><span class="pill z"></span><span>Hello world greeting</span><em>idle</em></div>
+          </div>
+        </div>
+        <figcaption><b>Subagents and the Waiting state.</b> Work Claude runs inside its own process gets a row under the session that started it.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="how">
+    <p class="eyebrow">How each tool arrives</p>
+    <h2 id="how">Port, build, or merge</h2>
+    <div class="how" style="margin-top:18px">
+      <div><h3>Port</h3><p>MIT and Apache-2.0 mods are copied into Zendr's mods and adapted to Zendr's look, Windows, and the Features switch. Their LICENSE file travels with them and the author is named in the mod header, the Settings card and NOTICE.</p></div>
+      <div><h3>Own build, idea credited</h3><p>Repos with no licence can't be copied. Zendr gets its own version written from the idea alone, and the card still says whose idea it was. Two marked "check licence" get read before any code moves.</p></div>
+      <div><h3>Merge into what Zendr has</h3><p>Some ideas fit an existing part better than a new panel: session search goes into Alt+Space search, review comments into the code view, the questions box into the Hub.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="first">
+    <p class="eyebrow">Recommended order</p>
+    <h2 id="first">First wave: 10 tools</h2>
+    <p class="lede" style="font-size:16px">These solve problems you hit every day when running several Claude sessions on one Windows PC. Most are small.</p>
+    <ul class="wave"><li><a href="#limits">Claude limits strip</a><span>Small</span></li><li><a href="#resume">Session search &amp; resume</a><span>Medium</span></li><li><a href="#resume">Revive after a reboot</a><span>Medium</span></li><li><a href="#resume">Reopen closed tab</a><span>Small</span></li><li><a href="#status">Tabs named by Claude</a><span>Small</span></li><li><a href="#status">Subagents in the Sessions list</a><span>Medium</span></li><li><a href="#status">Windows notifications</a><span>Small</span></li><li><a href="#steer">Prompt timeline</a><span>Medium</span></li><li><a href="#review">Review comments to Claude</a><span>Medium</span></li><li><a href="#manage">Claude manager</a><span>Medium</span></li></ul>
+  </section>
+
+  <section aria-labelledby="all">
+    <p class="eyebrow">Every pick</p>
+    <h2 id="all">The tools, by job</h2>
+    <div class="filters" role="group" aria-label="Show tools by wave">
+      <button type="button" id="f-all" data-f="all" aria-pressed="true">All</button>
+      <button type="button" id="f-1" data-f="1" aria-pressed="false">First wave</button>
+      <button type="button" id="f-2" data-f="2" aria-pressed="false">Second wave</button>
+      <button type="button" id="f-3" data-f="3" aria-pressed="false">Later</button>
+    </div>
+    <div class="groups" style="margin-top:18px">
+<section class="group" id="limits">
+  <div class="ghead"><h2>Limits and cost</h2><p>Know how much Claude you have left before you run out.</p><span class="count">4</span></div>
+  <div class="tools"><article class="tool" data-tier="1" data-group="limits">
+  <header><h3>Claude limits strip</h3><span class="tier t1">First wave</span></header>
+  <p class="what">Your 5-hour and weekly Claude limits as two small meters in the status bar, each with a pace tick showing how much of the window has passed. Click for every limit, reset times and a forecast (&quot;at this pace, runs out at 5:24 pm&quot;).</p>
+  <p class="why"><b>Why in Zendr</b> You run several Claude sessions at once, so you burn through limits faster than one terminal shows. Seeing the pace before you hit the wall is the single most useful number for a Claude-first app.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.claude_limits</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/nozikov/herdr-usage-limits">nozikov</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/nozikov/herdr-usage-limits/">gallery</a></li><li><a href="https://github.com/dev-gvs/herdr-claude-usage">dev-gvs</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/dev-gvs/herdr-claude-usage/">gallery</a></li><li><a href="https://github.com/cunderw/herdr-claude-usage">cunderw</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/cunderw/herdr-claude-usage/">gallery</a></li></ul>
+</article><article class="tool" data-tier="2" data-group="limits">
+  <header><h3>Usage &amp; cost dashboard</h3><span class="tier t2">Second wave</span></header>
+  <p class="what">A tab with tokens and estimated cost per day, week and month, stacked by model, your top repos and an hour-of-week heatmap, read from Claude Code&#x27;s own session files on disk.</p>
+  <p class="why"><b>Why in Zendr</b> Answers &quot;where did my usage go?&quot; without a website. Everything stays local.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.usage_dashboard</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/GaganSD/coding-agent-toolkit">GaganSD</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/GaganSD/coding-agent-toolkit--herdr-insights/">gallery</a></li><li><a href="https://github.com/JacobAtchley/herdr-addons">JacobAtchley</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/JacobAtchley/herdr-addons--cc-usage/">gallery</a></li></ul>
+</article><article class="tool" data-tier="3" data-group="limits">
+  <header><h3>Skill &amp; MCP ledger</h3><span class="tier t3">Later</span></header>
+  <p class="what">Ranks the skills and MCP servers you really use, counted from Claude Code&#x27;s logs, over a period you pick.</p>
+  <p class="why"><b>Why in Zendr</b> Pairs with the Claude manager below: see what you never use, then switch it off.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.skill_ledger</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/felixfisher/herdr-skill-ledger">felixfisher</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/felixfisher/herdr-skill-ledger/">gallery</a></li></ul>
+</article><article class="tool" data-tier="3" data-group="limits">
+  <header><h3>Wrapped</h3><span class="tier t3">Later</span></header>
+  <p class="what">A shareable card of your Claude Code stats: total tokens, what it would have cost, the most agents at once and how long they waited for you.</p>
+  <p class="why"><b>Why in Zendr</b> Fun, optional, and off by default.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.wrapped</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/adamentwistle/herdr-wrapped">adamentwistle</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/adamentwistle/herdr-wrapped/">gallery</a></li></ul>
+</article></div>
+</section>
+<section class="group" id="resume">
+  <div class="ghead"><h2>Never lose a conversation</h2><p>Find, resume and restore Claude sessions.</p><span class="count">4</span></div>
+  <div class="tools"><article class="tool" data-tier="1" data-group="resume">
+  <header><h3>Session search &amp; resume</h3><span class="tier t1">First wave</span></header>
+  <p class="what">A popup that searches every past Claude Code session on the PC by title, folder or anything said in it, previews the last exchanges, and resumes it in a new tab in its own folder, forks it, or jumps to it if it is still running.</p>
+  <p class="why"><b>Why in Zendr</b> Fits straight into the new Alt+Space search as a &quot;Past sessions&quot; section, so there is one search box for everything.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.session_search</code></dd></div>
+    <div><dt>How</dt><dd>Port into search</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/cunderw/herdr-sessions">cunderw</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/cunderw/herdr-sessions/">gallery</a></li><li><a href="https://github.com/ilstar/herdr-session-search">ilstar</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/ilstar/herdr-session-search/">gallery</a></li><li><a href="https://github.com/iml885203/herdr-mods">iml885203</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/iml885203/herdr-mods--agent-history/">gallery</a></li></ul>
+</article><article class="tool" data-tier="1" data-group="resume">
+  <header><h3>Revive after a reboot</h3><span class="tier t1">First wave</span></header>
+  <p class="what">When Windows restarts or herdr-core restarts, each terminal that ran Claude Code gets its conversation back in the same pane, with the same flags. Also forks the focused conversation into a new session beside it.</p>
+  <p class="why"><b>Why in Zendr</b> Windows updates restart the PC. Today every Claude session is lost; this brings them back with one toast.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.revive</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/dmazlum/herdr-revive">dmazlum</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/dmazlum/herdr-revive/">gallery</a></li><li><a href="https://github.com/dougcunha/herdr-mods">dougcunha</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/dougcunha/herdr-mods--agent-resume-app/">gallery</a></li></ul>
+</article><article class="tool" data-tier="1" data-group="resume">
+  <header><h3>Reopen closed tab</h3><span class="tier t1">First wave</span></header>
+  <p class="what">Ctrl+Shift+T brings back the last closed tab where it was, with its name, panes and folders, and Claude picks up its last conversation there. Press again for the one before.</p>
+  <p class="why"><b>Why in Zendr</b> A browser habit everyone already has. Cheap to add.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.reopen_tab</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/mustafaTokmak/herdr-reopen-tab">mustafaTokmak</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/mustafaTokmak/herdr-reopen-tab/">gallery</a></li></ul>
+</article><article class="tool" data-tier="2" data-group="resume">
+  <header><h3>Hibernate idle sessions</h3><span class="tier t2">Second wave</span></header>
+  <p class="what">Ends idle Claude processes (an idle session holds 350 to 500 MB) but keeps the shell, and types the resume command when you come back. A whole space can be put to sleep and woken as it was.</p>
+  <p class="why"><b>Why in Zendr</b> This ARM64 laptop has limited memory; ten idle Claude sessions add up to several GB.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.hibernate</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/VladTemp27/herdr-mods">VladTemp27</a> <span class="lic ok">Apache-2.0</span> <a class="gal" href="https://herdr.dev/mods/VladTemp27/herdr-mods--hibernate/">gallery</a></li><li><a href="https://github.com/hadiskeini/herdr-agent-suspend">hadiskeini</a> <span class="lic ok">Apache-2.0</span> <a class="gal" href="https://herdr.dev/mods/hadiskeini/herdr-agent-suspend/">gallery</a></li></ul>
+</article></div>
+</section>
+<section class="group" id="status">
+  <div class="ghead"><h2>See what every agent is doing</h2><p>Names, subagents and alerts that tell the truth.</p><span class="count">5</span></div>
+  <div class="tools"><article class="tool" data-tier="1" data-group="status">
+  <header><h3>Tabs named by Claude</h3><span class="tier t1">First wave</span></header>
+  <p class="what">A tab takes the title Claude Code gives its conversation, and /rename in Claude renames the tab too (F2 renames both). Tabs you name yourself are left alone.</p>
+  <p class="why"><b>Why in Zendr</b> Tabs called &quot;Claude Code&quot; and &quot;1&quot; are the most common complaint in a multi-agent window. Zendr&#x27;s Sessions list already shows summaries; this fixes the tab bar to match.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.claude_tab_names</code></dd></div>
+    <div><dt>How</dt><dd>Own build (idea credited)</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/iml885203/herdr-mods">iml885203</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/iml885203/herdr-mods--claude-tab-name/">gallery</a></li><li><a href="https://github.com/longwave/herdr-auto-tabs">longwave</a> <span class="lic warn">no licence</span> <a class="gal" href="https://herdr.dev/mods/longwave/herdr-auto-tabs/">gallery</a></li></ul>
+</article><article class="tool" data-tier="1" data-group="status">
+  <header><h3>Subagents in the Sessions list</h3><span class="tier t1">First wave</span></header>
+  <p class="what">Claude&#x27;s in-process subagents, background shells, monitors and scheduled wakeups appear as rows under the terminal that started them, at any depth.</p>
+  <p class="why"><b>Why in Zendr</b> Claude runs most of its work through subagents, and today they are invisible in Zendr.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.subagent_rows</code></dd></div>
+    <div><dt>How</dt><dd>Port into review-spaces</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/h0ru5/herdr-agents-tree">h0ru5</a> <span class="lic ok">Apache-2.0</span> <a class="gal" href="https://herdr.dev/mods/h0ru5/herdr-agents-tree/">gallery</a></li><li><a href="https://github.com/paneq/herdr-spaces-status">paneq</a> <span class="lic ok">Apache-2.0</span> <a class="gal" href="https://herdr.dev/mods/paneq/herdr-spaces-status/">gallery</a></li></ul>
+</article><article class="tool" data-tier="2" data-group="status">
+  <header><h3>&quot;Waiting&quot; state</h3><span class="tier t2">Second wave</span></header>
+  <p class="what">Claude Code reports &quot;done&quot; while shells it started in the background are still running. A small Claude hook lets the list show Waiting until they finish.</p>
+  <p class="why"><b>Why in Zendr</b> Stops false &quot;done&quot; notifications, which matter more now that notifications can reach the phone.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.waiting_state</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/zztalker/herdr-agent-waiting-mod">zztalker</a> <span class="lic ok">Apache-2.0</span> <a class="gal" href="https://herdr.dev/mods/zztalker/herdr-agent-waiting-mod--agent-waiting/">gallery</a></li></ul>
+</article><article class="tool" data-tier="1" data-group="status">
+  <header><h3>Windows notifications</h3><span class="tier t1">First wave</span></header>
+  <p class="what">When Claude needs you or finishes while Zendr is in the background, a Windows toast appears in the Action Center. Clicking it brings Zendr forward on that tab.</p>
+  <p class="why"><b>Why in Zendr</b> Zendr&#x27;s own toasts only show inside the window. Their mod targets macOS, so Zendr needs a Windows version of the idea.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.windows_toasts</code></dd></div>
+    <div><dt>How</dt><dd>Own build (idea credited)</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/benjaminsicard/herdr-mods">benjaminsicard</a> <span class="lic warn">no licence</span> <a class="gal" href="https://herdr.dev/mods/benjaminsicard/herdr-mods--desktop-notifications/">gallery</a></li></ul>
+</article><article class="tool" data-tier="2" data-group="status">
+  <header><h3>Recap &amp; quick switcher</h3><span class="tier t2">Second wave</span></header>
+  <p class="what">Recap lists every agent on every machine grouped by whose move it is, each with a one-line recap. The switcher is Ctrl+Tab between agents, most recent first, like switching apps.</p>
+  <p class="why"><b>Why in Zendr</b> Ctrl+Tab between Claude sessions is the fastest way to work through a dozen of them.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.agent_switcher</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/mrolafsson/herdr-recap">mrolafsson</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/mrolafsson/herdr-recap--app/">gallery</a></li><li><a href="https://github.com/herunan/herdr-over9k">herunan</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/herunan/herdr-over9k--over9k-switcher/">gallery</a></li></ul>
+</article></div>
+</section>
+<section class="group" id="steer">
+  <div class="ghead"><h2>Read and steer conversations</h2><p>Get around long sessions and answer Claude faster.</p><span class="count">4</span></div>
+  <div class="tools"><article class="tool" data-tier="1" data-group="steer">
+  <header><h3>Prompt timeline</h3><span class="tier t1">First wave</span></header>
+  <p class="what">Every prompt you gave the focused Claude session, as a column of cards: how long Claude worked on it, tokens, files touched. Click one to read the whole turn as Markdown or scroll the terminal to it.</p>
+  <p class="why"><b>Why in Zendr</b> Long Claude sessions are hard to scroll back through. This is the table of contents.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.prompt_timeline</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/herunan/herdr-over9k">herunan</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/herunan/herdr-over9k--over9k-timeline/">gallery</a></li><li><a href="https://github.com/ReyArlena/herdr-mods">ReyArlena</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/ReyArlena/herdr-mods--prompt-history/">gallery</a></li><li><a href="https://github.com/doominkim/herdr-prompt-jump">doominkim</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/doominkim/herdr-prompt-jump/">gallery</a></li></ul>
+</article><article class="tool" data-tier="2" data-group="steer">
+  <header><h3>Chat view for Claude</h3><span class="tier t2">Second wave</span></header>
+  <p class="what">Swaps the Claude terminal for a native chat of the same session: Markdown, highlighted code, Mermaid diagrams, tool cards with diffs, approval cards, and pickers for model, effort and permission mode.</p>
+  <p class="why"><b>Why in Zendr</b> The biggest item here. It also shares a lot with the phone web app, which needs the same rendering.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.chat_view</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Large</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/ChmaraX/herdr-chat">ChmaraX</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/ChmaraX/herdr-chat--herdr-app/">gallery</a></li><li><a href="https://github.com/adamentwistle/herdr-claude-chat">adamentwistle</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/adamentwistle/herdr-claude-chat/">gallery</a></li></ul>
+</article><article class="tool" data-tier="2" data-group="steer">
+  <header><h3>Redpen</h3><span class="tier t2">Second wave</span></header>
+  <p class="what">Opens Claude&#x27;s latest reply split into paragraphs, list items, code blocks and tables. Comment on any block, then send all the comments back as one message.</p>
+  <p class="why"><b>Why in Zendr</b> Turns &quot;scroll, copy, quote, type&quot; into one review pass.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.redpen</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/imutaroh/herdr-redpen">imutaroh</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/imutaroh/herdr-redpen/">gallery</a></li></ul>
+</article><article class="tool" data-tier="3" data-group="steer">
+  <header><h3>Fleece &amp; agent images</h3><span class="tier t3">Later</span></header>
+  <p class="what">Pulls the files edited, code, commands, paths and links out of Claude&#x27;s last few answers into a list you click to copy. Agent images shows every screenshot and image in the conversation.</p>
+  <p class="why"><b>Why in Zendr</b> Copying out of a terminal is clumsy; this makes the useful bits one click.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.fleece</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/dmazlum/herdr-fleece">dmazlum</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/dmazlum/herdr-fleece--app/">gallery</a></li><li><a href="https://github.com/DeevsDeevs/deevs-herdr-kit">DeevsDeevs</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/DeevsDeevs/deevs-herdr-kit--agent-images/">gallery</a></li></ul>
+</article></div>
+</section>
+<section class="group" id="review">
+  <div class="ghead"><h2>Review what Claude changed</h2><p>From diff to feedback in one place.</p><span class="count">2</span></div>
+  <div class="tools"><article class="tool" data-tier="1" data-group="review">
+  <header><h3>Review comments to Claude</h3><span class="tier t1">First wave</span></header>
+  <p class="what">In the code view, click a line or hunk to leave a comment like a pull request review. Send them all to the Claude session that made the change, pasted ready to submit.</p>
+  <p class="why"><b>Why in Zendr</b> Zendr&#x27;s code view already shows the diff. This closes the loop back to the agent.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.review_comments</code></dd></div>
+    <div><dt>How</dt><dd>Port into review-file</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/jkuepker/herdr-mods">jkuepker</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/jkuepker/herdr-mods--agent-review/">gallery</a></li><li><a href="https://github.com/vytasgavelis/herdr-reviewer">vytasgavelis</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/vytasgavelis/herdr-reviewer/">gallery</a></li></ul>
+</article><article class="tool" data-tier="2" data-group="review">
+  <header><h3>Guided walkthrough</h3><span class="tier t2">Second wave</span></header>
+  <p class="what">Claude groups related hunks of a diff into steps, orders them, and explains each one with its code. Tourist does the same for a whole repo or a feature you describe.</p>
+  <p class="why"><b>Why in Zendr</b> Reading a 40-file change Claude made is the slow part of working with it.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.walkthrough</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/dmazlum/herdr-walkthrough">dmazlum</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/dmazlum/herdr-walkthrough/">gallery</a></li><li><a href="https://github.com/CodeyPacker/herdr-mods">CodeyPacker</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/CodeyPacker/herdr-mods--tourist/">gallery</a></li></ul>
+</article></div>
+</section>
+<section class="group" id="manage">
+  <div class="ghead"><h2>Manage Claude itself</h2><p>Skills, MCP servers, hooks, plugins and accounts.</p><span class="count">2</span></div>
+  <div class="tools"><article class="tool" data-tier="1" data-group="manage">
+  <header><h3>Claude manager</h3><span class="tier t1">First wave</span></header>
+  <p class="what">Lists everything Claude Code loads from ~/.claude (skills, commands, agents, MCP servers, hooks, plugins) and turns each on or off, writing settings.json the way Claude Code itself does.</p>
+  <p class="why"><b>Why in Zendr</b> Extends the Settings → Claude mods page you already have from three plugins to everything Claude loads.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.claude_manager</code></dd></div>
+    <div><dt>How</dt><dd>Own build in Settings</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/h4ckm1n-dev/herdr-mods">h4ckm1n-dev</a> <span class="lic warn">check licence</span> <a class="gal" href="https://herdr.dev/mods/h4ckm1n-dev/herdr-mods--claude-manager/">gallery</a></li></ul>
+</article><article class="tool" data-tier="2" data-group="manage">
+  <header><h3>Several Claude accounts</h3><span class="tier t2">Second wave</span></header>
+  <p class="what">A 5h and 7d gauge per account, a chip naming the account the focused session uses, and a picker for which account new sessions start under.</p>
+  <p class="why"><b>Why in Zendr</b> Useful because this PC already has two Claude configs (the default one and the team one).</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.claude_accounts</code></dd></div>
+    <div><dt>How</dt><dd>Own build</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/lcalmsky/herdr-claude-accounts">lcalmsky</a> <span class="lic warn">check licence</span> <a class="gal" href="https://herdr.dev/mods/lcalmsky/herdr-claude-accounts/">gallery</a></li></ul>
+</article></div>
+</section>
+<section class="group" id="plan">
+  <div class="ghead"><h2>Automate and plan</h2><p>Schedules, plans and questions.</p><span class="count">4</span></div>
+  <div class="tools"><article class="tool" data-tier="2" data-group="plan">
+  <header><h3>Automations</h3><span class="tier t2">Second wave</span></header>
+  <p class="what">Scheduled Claude prompts: a prompt, a schedule and a repo. Every weekday at 9:00 a session starts in a fresh worktree and works. The panel shows what ran while you were away.</p>
+  <p class="why"><b>Why in Zendr</b> The free way to have Claude do nightly chores (dependency bumps, test runs, triage) on this PC.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.automations</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/DnzzL/herdr-automations">DnzzL</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/DnzzL/herdr-automations--app/">gallery</a></li></ul>
+</article><article class="tool" data-tier="2" data-group="plan">
+  <header><h3>Plans &amp; to-dos</h3><span class="tier t2">Second wave</span></header>
+  <p class="what">Claude&#x27;s plans, notes and reviews in a formatted Markdown window you can edit block by block, and a per-project to-do list the agents keep in sync with TODO.md.</p>
+  <p class="why"><b>Why in Zendr</b> Claude Code writes plans in plan mode; this gives them a home that isn&#x27;t the terminal.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.plans_panel</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/jlopezlira/herdr-kanso">jlopezlira</a> <span class="lic ok">Apache-2.0</span> <a class="gal" href="https://herdr.dev/mods/jlopezlira/herdr-kanso--markdown-panel/">gallery</a></li><li><a href="https://github.com/herunan/herdr-over9k">herunan</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/herunan/herdr-over9k--over9k-todo/">gallery</a></li></ul>
+</article><article class="tool" data-tier="3" data-group="plan">
+  <header><h3>Questions inbox</h3><span class="tier t3">Later</span></header>
+  <p class="what">Instead of asking in a busy terminal, Claude posts a question with its recommendation; you answer in a box. Child agents report to their parent the same way.</p>
+  <p class="why"><b>Why in Zendr</b> Overlaps with Zendr&#x27;s Hub and the session-bridge plugin. Worth taking the answer-box idea into the Hub.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.questions</code></dd></div>
+    <div><dt>How</dt><dd>Merge into Hub</dd></div>
+    <div><dt>Size</dt><dd>Medium</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/ergunozyurt/herdr-super-agent">ergunozyurt</a> <span class="lic ok">Apache-2.0</span> <a class="gal" href="https://herdr.dev/mods/ergunozyurt/herdr-super-agent/">gallery</a></li><li><a href="https://github.com/CMehlstaeubler/herdr-desk">CMehlstaeubler</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/CMehlstaeubler/herdr-desk/">gallery</a></li></ul>
+</article><article class="tool" data-tier="3" data-group="plan">
+  <header><h3>Worktree include</h3><span class="tier t3">Later</span></header>
+  <p class="what">A .worktreeinclude file lists git-ignored files (.env, local config) that every new worktree gets copied in, whether Zendr, Claude Code or git made it.</p>
+  <p class="why"><b>Why in Zendr</b> Claude often works in worktrees; without .env they fail on the first run.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.worktree_include</code></dd></div>
+    <div><dt>How</dt><dd>Own build (idea credited)</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/madwire/herdr-worktreeinclude">madwire</a> <span class="lic warn">no licence</span> <a class="gal" href="https://herdr.dev/mods/madwire/herdr-worktreeinclude/">gallery</a></li></ul>
+</article></div>
+</section>
+<section class="group" id="fun">
+  <div class="ghead"><h2>Just for fun</h2><p></p><span class="count">1</span></div>
+  <div class="tools"><article class="tool" data-tier="3" data-group="fun">
+  <header><h3>Pets &amp; voice</h3><span class="tier t3">Later</span></header>
+  <p class="what">Each running agent as a small pixel creature along the bottom (colour and motion show its state), and a voice banner that reads replies aloud and takes spoken prompts.</p>
+  <p class="why"><b>Why in Zendr</b> Nice to have. Off by default.</p>
+  <dl class="facts">
+    <div><dt>Switch</dt><dd><code>features.pets_voice</code></dd></div>
+    <div><dt>How</dt><dd>Port</dd></div>
+    <div><dt>Size</dt><dd>Small</dd></div>
+  </dl>
+  <ul class="credit" aria-label="Made by"><li><a href="https://github.com/Aryan1092raj/Herdr-pets">Aryan1092raj</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/Aryan1092raj/Herdr-pets/">gallery</a></li><li><a href="https://github.com/RoverWillemars/Herdr-Voice-Agent">RoverWillemars</a> <span class="lic ok">MIT</span> <a class="gal" href="https://herdr.dev/mods/RoverWillemars/Herdr-Voice-Agent/">gallery</a></li></ul>
+</article></div>
+</section>
+    </div>
+  </section>
+
+  <section aria-labelledby="have">
+    <p class="eyebrow">Skipped</p>
+    <h2 id="have">Gallery ideas Zendr already covers</h2>
+    <ul class="already"><li><b>Git Graph</b> <span>by rabeeh-ta</span> <i>Zendr has: git-graph mod</i></li><li><b>gitview / Better Changes</b> <span>by ChmaraX, munza</span> <i>Zendr has: review-changes</i></li><li><b>T3 Inbox / Recap cards</b> <span>by JinJieBeWater</span> <i>Zendr has: inbox drawer</i></li><li><b>Coordinator / Herd</b> <span>by jonathan-fielding, adamentwistle</span> <i>Zendr has: Hub</i></li><li><b>file-icons</b> <span>by cybertron288</span> <i>Zendr has: Seti icons in the code view</i></li><li><b>Open with / herdr-nvim</b> <span>by jlopezlira, ChmaraX</span> <i>Zendr has: built-in editor + VS Code themes</i></li><li><b>Session titles in lists</b> <span>by choam2426</span> <i>Zendr has: Sessions list summaries</i></li><li><b>Over9k Launcher</b> <span>by herunan</span> <i>Zendr has: launch mod + new search</i></li></ul>
+  </section>
+
+  <section class="credits" aria-labelledby="thanks">
+    <p class="eyebrow">Credits</p>
+    <h2 id="thanks">The people who made these</h2>
+    <p>Every tool here started in the <a href="https://herdr.dev/gallery/">herdr gallery</a>, built by the Herdr community on top of <a href="https://github.com/herdrdev">Herdr</a>, the software Zendr is made from. Thanks to <a href="https://github.com/adamentwistle">adamentwistle</a>, <a href="https://github.com/adamentwistle">adamentwistle</a>, <a href="https://github.com/Aryan1092raj">Aryan1092raj</a>, <a href="https://github.com/benjaminsicard">benjaminsicard</a>, <a href="https://github.com/ChmaraX">ChmaraX</a>, <a href="https://github.com/CMehlstaeubler">CMehlstaeubler</a>, <a href="https://github.com/CodeyPacker">CodeyPacker</a>, <a href="https://github.com/cunderw">cunderw</a>, <a href="https://github.com/cunderw">cunderw</a>, <a href="https://github.com/DeevsDeevs">DeevsDeevs</a>, <a href="https://github.com/dev-gvs">dev-gvs</a>, <a href="https://github.com/dmazlum">dmazlum</a>, <a href="https://github.com/dmazlum">dmazlum</a>, <a href="https://github.com/dmazlum">dmazlum</a>, <a href="https://github.com/DnzzL">DnzzL</a>, <a href="https://github.com/doominkim">doominkim</a>, <a href="https://github.com/dougcunha">dougcunha</a>, <a href="https://github.com/ergunozyurt">ergunozyurt</a>, <a href="https://github.com/felixfisher">felixfisher</a>, <a href="https://github.com/GaganSD">GaganSD</a>, <a href="https://github.com/h0ru5">h0ru5</a>, <a href="https://github.com/h4ckm1n-dev">h4ckm1n-dev</a>, <a href="https://github.com/hadiskeini">hadiskeini</a>, <a href="https://github.com/herunan">herunan</a>, <a href="https://github.com/ilstar">ilstar</a>, <a href="https://github.com/iml885203">iml885203</a>, <a href="https://github.com/imutaroh">imutaroh</a>, <a href="https://github.com/JacobAtchley">JacobAtchley</a>, <a href="https://github.com/jkuepker">jkuepker</a>, <a href="https://github.com/jlopezlira">jlopezlira</a>, <a href="https://github.com/lcalmsky">lcalmsky</a>, <a href="https://github.com/longwave">longwave</a>, <a href="https://github.com/madwire">madwire</a>, <a href="https://github.com/mrolafsson">mrolafsson</a>, <a href="https://github.com/mustafaTokmak">mustafaTokmak</a>, <a href="https://github.com/nozikov">nozikov</a>, <a href="https://github.com/paneq">paneq</a>, <a href="https://github.com/ReyArlena">ReyArlena</a>, <a href="https://github.com/RoverWillemars">RoverWillemars</a>, <a href="https://github.com/VladTemp27">VladTemp27</a>, <a href="https://github.com/vytasgavelis">vytasgavelis</a>, <a href="https://github.com/zztalker">zztalker</a>.</p>
+    <p>Licences were read from each repo on 26 Nov 2026. "No licence" means all rights reserved, so Zendr would only take the idea. Gallery star counts change daily and weren't used for the order; usefulness to a Claude-first Windows setup was.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+  const buttons = document.querySelectorAll(".filters button");
+  const apply = (f) => {
+    buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.f === f)));
+    document.querySelectorAll(".tool").forEach((t) => { t.hidden = f !== "all" && t.dataset.tier !== f; });
+    document.querySelectorAll(".group").forEach((g) => { g.hidden = !g.querySelector(".tool:not([hidden])"); });
+    try { localStorage.setItem("zct.filter", f); } catch (e) {}
+  };
+  buttons.forEach((b) => b.addEventListener("click", () => apply(b.dataset.f)));
+  let saved = "all";
+  try { saved = localStorage.getItem("zct.filter") || "all"; } catch (e) {}
+  apply(saved);
+})();
+</script>
