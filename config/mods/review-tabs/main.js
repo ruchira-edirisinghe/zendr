@@ -328,14 +328,14 @@ export default class Tabs extends View {
       if (active >= 0) this.scroll.scroll_to_item(active);
     }
     const stop = (_e, cx) => cx.stop_propagation();
-    const button = (id, label, action, tip) => div().id(id).when(Boolean(tip), el => el.tooltip(tip)).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
+    const button = (id, label, action, tip) => div().id(id).when(Boolean(tip), el => el.tooltip(tip)).size(32).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", stop).on_click(action).child(label);
     const item = (c, i) => {
       const lead = panes().find(p => p.tab === c.id && p.program?.agent) ?? panes().find(p => p.tab === c.id);
       const program = lead?.program;
       const name = label(c, lead);
       const tint = ownColor(lead?.terminal);
-      return h_flex().id(`tab-${c.id}`).h(29).px(10).gap(7).rounded(7).items_center().flex_none().text_size(12.8)
+      return h_flex().id(`tab-${c.id}`).h(34).px(12).gap(8).rounded(8).items_center().flex_none().text_size(13.5)
         // A rename or status dot on this or an earlier tab can push the active one out.
         .when(i <= active, el => el.on_size_change((_size, cx) => { this.scroll.scroll_to_item(active); cx.notify(); }))
         // A tab whose agent needs you lights up in the attention colour, as in cmux.
@@ -351,11 +351,11 @@ export default class Tabs extends View {
           else run("tab.select", { id: c.id });
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "review-menu", kind: "popup", width: 220, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
-        .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(14).text_color(t.muted) : image(program.icon).size(14)))
+        .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(16).text_color(t.muted) : image(program.icon).size(16)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
         .when(c.status === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
         .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(6).rounded(3).bg(t[c.status])))
-        .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(12))));
+        .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(13))));
     };
     const root = layout(), sidebar = find(root, "sidebar"), w = window();
     // Old saved rails and a dragged-narrow sidebar can be smaller than the window buttons.
@@ -372,10 +372,10 @@ export default class Tabs extends View {
     const sideOn = (child) => Boolean(side && !side.hidden && side.active === child);
     const viewOn = (id) => { const n = find(root, id); return Boolean(n && !n.hidden); };
     const compact = (this.barWidth ?? 2000) < 1360;
-    const toggle = (id, icon, label, on, tip, action, extra) => h_flex().id(`tb-${id}`).h(28).px(9).gap(6).flex_none().items_center().rounded(7)
-      .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted).border_1().border_color(on ? t.border : t.chrome)
+    const toggle = (id, icon, label, on, tip, action, extra) => h_flex().id(`tb-${id}`).h(32).px(10).gap(7).flex_none().items_center().rounded(8)
+      .text_size(13).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted).border_1().border_color(on ? t.border : t.chrome)
       .hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip(tip).on_mouse_down("left", stop)
-      .on_click(() => action()).child(svg(icon).size(14)).when(!compact, el => el.child(label)).when(Boolean(extra), el => el.child(extra));
+      .on_click(() => action()).child(svg(icon).size(16)).when(!compact, el => el.child(label)).when(Boolean(extra), el => el.child(extra));
     const panelButton = (id, label, icon) => {
       const on = Boolean(panel && !panel.hidden && body?.active === id);
       return toggle(`panel-${id}`, icon, label, on, `Show or hide the ${label} panel`, () => {
@@ -390,13 +390,13 @@ export default class Tabs extends View {
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().track_scroll(this.scroll)
         .on_size_change((_size, cx) => { if (active >= 0) { this.scroll.scroll_to_item(active); cx.notify(); } })
         .children(shown.map(item)))
-      .child(button("tab-new", svg("mods/workspace-chrome/plus.svg").size(14), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), "New tab or terminal (Ctrl+Shift+T)"))
+      .child(button("tab-new", svg("mods/workspace-chrome/plus.svg").size(16), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), "New tab or terminal (Ctrl+Shift+T)"))
       .when(feature("split_buttons"), el => el
-        .child(button("split-right", svg("mods/review-file/icons/split.svg").size(14), () => run("pane.split", { direction: "right" }), "New terminal to the right (Ctrl+Shift+O)"))
-        .child(button("split-down", svg("mods/review-file/icons/split-down.svg").size(14), () => run("pane.split", { direction: "down" }), "New terminal below (Ctrl+Shift+E)")))
-      .when(feature("arrange"), el => el.child(button("arrange", svg("mods/review-file/icons/arrange.svg").size(14), () => run("layout.arrange"), "Arrange blocks: drag panels to new places (Esc when done)")))
+        .child(button("split-right", svg("mods/review-file/icons/split.svg").size(16), () => run("pane.split", { direction: "right" }), "New terminal to the right (Ctrl+Shift+O)"))
+        .child(button("split-down", svg("mods/review-file/icons/split-down.svg").size(16), () => run("pane.split", { direction: "down" }), "New terminal below (Ctrl+Shift+E)")))
+      .when(feature("arrange"), el => el.child(button("arrange", svg("mods/review-file/icons/arrange.svg").size(16), () => run("layout.arrange"), "Arrange blocks: drag panels to new places (Esc when done)")))
       // The toolbar: every panel is a labelled toggle, lit while it's showing.
-      .child(div().w(1).h(18).mx(5).flex_none().bg(t.border))
+      .child(div().w(1).h(22).mx(6).flex_none().bg(t.border))
       .when(feature("command_search") || feature("ai_command"), el => el.child(toggle("commands", "mods/commands/workflow.svg", "Commands", false,
         "Command search: history, workflows and Ask AI (Ctrl+Shift+R)", () => openCommands(feature("command_search") ? "history" : "ai"))))
       .when(feature("code_view") && Boolean(find(root, "explorer")), el => el.child(toggle("explorer", "mods/workspace-chrome/panel-left.svg", "Explorer", viewOn("explorer"),
@@ -416,9 +416,9 @@ export default class Tabs extends View {
             .text_size(10).font_semibold().text_color(t.background).child(unread > 99 ? "99+" : String(unread))))
           .when(unread > 0 && badge === "dot", el => el.child(div().size(7).rounded(4).bg(t.blocked)))
           .when(quiet, el => el.child(svg("mods/inbox/moon.svg").size(12).text_color(t.working))))))
-      .child(div().w(1).h(18).mx(5).flex_none().bg(t.border))
-      .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/review-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
-        .child(button("maximize", w.platform === "windows" ? svg(`mods/review-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
-        .child(button("close-window", w.platform === "windows" ? svg("mods/review-tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));
+      .child(div().w(1).h(22).mx(6).flex_none().bg(t.border))
+      .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/review-tabs/win-min.svg").size(17) : "−", () => run("window.minimize")))
+        .child(button("maximize", w.platform === "windows" ? svg(`mods/review-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(17) : "□", () => run("window.maximize")))
+        .child(button("close-window", w.platform === "windows" ? svg("mods/review-tabs/win-close.svg").size(17) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));
   }
 }

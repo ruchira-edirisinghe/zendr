@@ -17,7 +17,7 @@
             "mod": "workspace-chrome"
           },
           "size": {
-            "px": 46
+            "px": 52
           },
           "window_drag": true
         },
@@ -82,7 +82,7 @@
             "mod": "review-tabs"
           },
           "size": {
-            "px": 42
+            "px": 52
           },
           "window_drag": true
         },
