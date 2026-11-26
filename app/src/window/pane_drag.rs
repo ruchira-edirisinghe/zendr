@@ -11,7 +11,7 @@ pub(super) struct PaneDrag {
 }
 
 /// The outer quarter of a pane chooses its nearest edge; the middle swaps.
-fn drop_zone(bounds: Bounds<Pixels>, at: Point<Pixels>) -> Option<Option<Edge>> {
+pub(super) fn drop_zone(bounds: Bounds<Pixels>, at: Point<Pixels>) -> Option<Option<Edge>> {
     if !bounds.contains(&at) || bounds.size.width <= px(0.) || bounds.size.height <= px(0.) {
         return None;
     }

@@ -302,7 +302,7 @@ export default class Spaces extends View {
 
   menu(w) {
     // A popup is as tall as its items; height is only the most.
-    openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } });
+    openOverlay({ mod: "menu", kind: "popup", width: 200, height: 330, props: { tab: "space", target: { id: w.id } } });
   }
 
   orderingDue(now) {
@@ -513,7 +513,7 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child(spaceAvatar(w.name))))
+          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child((shared("space.icons") ?? {})[w.id] ?? spaceAvatar(w.name))))
           .child(div().flex_initial().min_w(SIDE_MIN).truncate().text_color(t.foreground).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1()),
       );

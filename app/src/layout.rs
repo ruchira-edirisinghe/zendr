@@ -699,7 +699,148 @@ impl Node {
         }
         true
     }
+
+    /// Where docks move (arrange mode): the first row/column marked
+    /// `"movable": true`, else the one holding the terminals.
+    pub fn dock_region(&self) -> Option<&Node> {
+        let line = |n: &&Node| n.axis().is_some();
+        self.walk().into_iter().filter(line).find(|n| n.movable == Some(true)).or_else(|| {
+            let context = self.walk().into_iter().find(|n| matches!(n.content(), Some(Content::Context { .. })))?;
+            // Past the rows/columns earlier drops made around the terminals.
+            let mut parent = self.parent_of(&context.id)?;
+            while parent.id.starts_with(DOCK_WRAP) {
+                parent = self.parent_of(&parent.id)?;
+            }
+            Some(parent).filter(line)
+        })
+    }
+
+    /// The blocks arrange mode can drag: the region's shown children, and the
+    /// children of the rows/columns earlier drops made (`dock-…`).
+    pub fn docks(&self) -> Vec<&Node> {
+        fn collect<'a>(n: &'a Node, out: &mut Vec<&'a Node>) {
+            for c in n.children().iter().filter(|c| !c.hidden && c.movable != Some(false)) {
+                if c.id.starts_with(DOCK_WRAP) && c.axis().is_some() {
+                    collect(c, out);
+                } else {
+                    out.push(c);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        if let Some(region) = self.dock_region() {
+            collect(region, &mut out);
+        }
+        out
+    }
+
+    /// Moves the dock `source` beside `target` (`edge`), or swaps them (no
+    /// edge). Each keeps its own size and limits; a fixed width that ends up
+    /// across the other axis becomes a fixed height.
+    pub fn move_dock(&mut self, source: &str, target: &str, edge: Option<Edge>) -> bool {
+        let docks: Vec<String> = self.docks().iter().map(|n| n.id.clone()).collect();
+        if source == target || !docks.iter().any(|d| d == source) || !docks.iter().any(|d| d == target) {
+            return false;
+        }
+        let mut root = self.clone();
+        let Some(edge) = edge else {
+            let (a, b) = (root.find(source).map(|n| n.size), root.find(target).map(|n| n.size));
+            if !root.swap(source, target) {
+                return false;
+            }
+            root.find_mut(source).unwrap().size = a.flatten();
+            root.find_mut(target).unwrap().size = b.flatten();
+            *self = root;
+            return true;
+        };
+        let axis = if edge.vertical() { Axis::Row } else { Axis::Column };
+        let after = matches!(edge, Edge::Right | Edge::Bottom);
+        let from = root.parent_of(source).map(|p| (p.id.clone(), p.axis()));
+        let Some(node) = remove_inner(&mut root, source) else { return false };
+        if let Some((from, _)) = &from {
+            root.unwrap_dock(from);
+        }
+        let Some((parent, parent_axis, gap, divider)) =
+            root.parent_of(target).map(|p| (p.id.clone(), p.axis(), p.gap, p.divider.clone()))
+        else {
+            return false;
+        };
+        if parent_axis == Some(axis) {
+            let c = root.find_mut(&parent).unwrap().children_mut().unwrap();
+            let i = c.iter().position(|n| n.id == target).unwrap();
+            c.insert(if after { i + 1 } else { i }, node);
+        } else {
+            let fresh = (1..).map(|i| format!("{DOCK_WRAP}{i}")).find(|id| root.find(id).is_none()).unwrap();
+            let t = root.find_mut(target).unwrap();
+            let mut old = std::mem::replace(t, Node::new("", Kind::Row { children: vec![] }));
+            // The pair takes the target's place: fixed only if both were fixed.
+            let fixed = matches!(old.size, Some(Size::Px { .. })) && matches!(node.size, Some(Size::Px { .. }));
+            let size = if fixed { old.size } else { old.size.filter(|s| matches!(s, Size::Weight { .. })) };
+            old.size = None;
+            // The target's limits hold its slot: the pair keeps them, and hands
+            // them back if it gives way again.
+            let (min, max) = (old.min.take(), old.max.take());
+            let mut wrap = Node::container(fresh, axis, if after { vec![old, node] } else { vec![node, old] });
+            wrap.size = size;
+            wrap.min = min;
+            wrap.max = max;
+            wrap.gap = gap;
+            wrap.divider = divider;
+            *t = wrap;
+        }
+        if let Some(region) = root.dock_region().map(|r| r.id.clone()) {
+            root.keep_flexible(&region);
+        }
+        *self = root;
+        true
+    }
+
+    /// A drop's wrapper left with one child gives way to it; an empty one goes.
+    fn unwrap_dock(&mut self, id: &str) {
+        let Some(n) = self.find(id).filter(|n| n.id.starts_with(DOCK_WRAP) && n.axis().is_some()) else { return };
+        match n.children().len() {
+            0 => {
+                let parent = self.parent_of(id).map(|p| p.id.clone());
+                remove_inner(self, id);
+                if let Some(p) = parent {
+                    self.unwrap_dock(&p);
+                }
+            }
+            1 => {
+                let n = self.find_mut(id).unwrap();
+                let (size, min, max) = (n.size, n.min, n.max);
+                let mut only = n.children_mut().unwrap().remove(0);
+                if only.axis().is_some() || size.is_some() {
+                    only.size = size;
+                }
+                only.min = only.min.or(min);
+                only.max = only.max.or(max);
+                *n = only;
+            }
+            _ => {}
+        }
+    }
+
+    /// Each row/column in `id` keeps one shown child without a fixed size, so
+    /// it still fills its space.
+    fn keep_flexible(&mut self, id: &str) {
+        let Some(n) = self.find_mut(id) else { return };
+        let ids: Vec<String> = n.children().iter().filter(|c| c.axis().is_some()).map(|c| c.id.clone()).collect();
+        let line = n.axis().is_some();
+        if let Some(c) = n.children_mut().filter(|_| line) {
+            let shown = || c.iter().filter(|c| !c.hidden);
+            if shown().count() > 0 && shown().all(|c| matches!(c.size, Some(Size::Px { .. }))) {
+                c.iter_mut().rev().find(|c| !c.hidden).unwrap().size = None;
+            }
+        }
+        for id in ids {
+            self.keep_flexible(&id);
+        }
+    }
 }
+
+/// Ids of the rows/columns arrange mode makes when a dock lands on an edge.
+pub const DOCK_WRAP: &str = "dock-";
 
 fn active_child<'a>(children: &'a [Node], active: Option<&str>) -> Option<&'a Node> {
     let visible = || children.iter().filter(|c| !c.hidden);
@@ -964,5 +1105,93 @@ mod tests {
         let ids: Vec<_> = n.children().iter().map(|c| c.id.clone()).collect();
         assert_eq!(ids, ["c", "b", "a"]);
         assert_eq!(n.children()[0].size, Some(Size::Px { px: 100.0 }));
+    }
+
+    /// The review layout's work area: a sidebar, then explorer (hidden),
+    /// terminals, a fixed side stack and a hidden fixed panel.
+    fn work() -> Node {
+        let px = |n: &mut Node, px: f32| n.size = Some(Size::Px { px });
+        let mut explorer = term("explorer");
+        explorer.hidden = true;
+        px(&mut explorer, 260.0);
+        let mut main = Node::block("main", Content::Context { tab: "active".into(), pane: None });
+        main.min = Some(260.0);
+        let mut side = Node::new("side", Kind::Stack { children: vec![term("hub"), term("graph")], active: None, header: None });
+        px(&mut side, 340.0);
+        side.min = Some(200.0);
+        let mut panel = Node::container("panel", Axis::Column, vec![term("panel-body")]);
+        panel.hidden = true;
+        px(&mut panel, 368.0);
+        let mut body = Node::container("work-body", Axis::Row, vec![explorer, main, side, panel]);
+        body.gap = Some(6.0);
+        Node::container("root", Axis::Row, vec![term("sidebar"), body])
+    }
+
+    fn ids(n: &Node) -> Vec<&str> {
+        n.children().iter().map(|c| c.id.as_str()).collect()
+    }
+
+    #[test]
+    fn docks_are_the_work_areas_shown_blocks() {
+        let n = work();
+        assert_eq!(n.dock_region().map(|r| r.id.as_str()), Some("work-body"));
+        assert_eq!(n.docks().iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["main", "side"]);
+        // A marked region wins over the terminals' parent.
+        let mut marked = work();
+        marked.movable = Some(true);
+        assert_eq!(marked.dock_region().map(|r| r.id.as_str()), Some("root"));
+    }
+
+    #[test]
+    fn a_side_dock_drops_below_the_terminals() {
+        let mut n = work();
+        assert!(n.move_dock("side", "main", Some(Edge::Bottom)));
+        let body = n.find("work-body").unwrap();
+        assert_eq!(ids(body), ["explorer", "dock-1", "panel"]);
+        let wrap = n.find("dock-1").unwrap();
+        assert_eq!((wrap.axis(), ids(wrap)), (Some(Axis::Column), vec!["main", "side"]));
+        // The pair fills the row and holds the terminals' limit; the side keeps 340 and its own (now heights).
+        assert_eq!((wrap.size, wrap.gap, wrap.min), (None, Some(6.0), Some(260.0)));
+        assert_eq!(n.find("main").unwrap().min, None);
+        assert_eq!((n.find("side").unwrap().size, n.find("side").unwrap().min), (Some(Size::Px { px: 340.0 }), Some(200.0)));
+        assert_eq!(n.docks().iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["main", "side"]);
+        // The region is still the whole work area, not the wrapper round the terminals.
+        assert_eq!(n.dock_region().map(|r| r.id.as_str()), Some("work-body"));
+        n.find_mut("explorer").unwrap().hidden = false;
+        assert_eq!(n.docks().iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["explorer", "main", "side"]);
+        n.find_mut("explorer").unwrap().hidden = true;
+        // Back beside it: the wrapper gives way and the row is as it was.
+        assert!(n.move_dock("side", "main", Some(Edge::Right)));
+        assert_eq!(ids(n.find("work-body").unwrap()), ["explorer", "main", "side", "panel"]);
+        assert!(n.find("dock-1").is_none());
+        // Every limit is back where it was.
+        assert_eq!(n, {
+            let mut w = work();
+            w.find_mut("side").unwrap().size = Some(Size::Px { px: 340.0 });
+            w
+        });
+    }
+
+    #[test]
+    fn docks_go_before_or_after_and_swap_keeping_their_sizes() {
+        let mut n = work();
+        assert!(n.move_dock("side", "main", Some(Edge::Left)));
+        assert_eq!(ids(n.find("work-body").unwrap()), ["explorer", "side", "main", "panel"]);
+        assert!(n.move_dock("main", "side", None));
+        assert_eq!(ids(n.find("work-body").unwrap()), ["explorer", "main", "side", "panel"]);
+        assert_eq!(n.find("side").unwrap().size, Some(Size::Px { px: 340.0 }));
+        assert!(!n.move_dock("side", "side", Some(Edge::Top)));
+        assert!(!n.move_dock("side", "explorer", Some(Edge::Top)), "hidden blocks aren't docks");
+        assert!(!n.move_dock("sidebar", "main", Some(Edge::Top)), "outside the region");
+    }
+
+    #[test]
+    fn a_region_never_ends_up_all_fixed() {
+        let mut n = work();
+        // The terminals go above the side: the pair keeps the side's place, and
+        // since only the side was fixed, the pair flexes and fills the row.
+        assert!(n.move_dock("main", "side", Some(Edge::Top)));
+        let wrap = n.find("dock-1").unwrap();
+        assert_eq!((ids(wrap), wrap.size), (vec!["main", "side"], None));
     }
 }

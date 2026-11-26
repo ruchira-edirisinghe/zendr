@@ -3307,6 +3307,8 @@ const BASE: &str = r#"  /** A row. */
     blur(): void;
     /** Wraps long lines instead of scrolling sideways, keeping the text and selection. */
     set_soft_wrap(wrap: boolean): void;
+    /** HERDR: highlights the text as another language (a syntax name such as "rust" or a file extension), keeping the text and undo history. */
+    set_language(language: string): void;
     /** Frees the state; it can't be read or drawn afterwards. Not a blur. */
     release(): boolean;
   }

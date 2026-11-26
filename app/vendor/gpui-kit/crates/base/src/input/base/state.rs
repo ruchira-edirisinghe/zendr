@@ -2595,6 +2595,11 @@ impl<M: InputModeKind> InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // HERDR: Ctrl+wheel (Cmd+wheel on macOS) is the host's zoom gesture: don't
+        // scroll, and let the event bubble to the element that zooms the editor.
+        if event.modifiers.secondary() {
+            return;
+        }
         let line_height = self
             .last_layout
             .as_ref()

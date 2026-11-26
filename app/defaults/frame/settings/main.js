@@ -2,13 +2,18 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, InputState, Input, Popup } from "gpui-base";
-import { hc, run, theme, themes, fonts, updates, telemetry, settings, layouts, shared, setShared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, notify, window } from "herdr";
+import { exec, hc, run, theme, themes, fonts, updates, telemetry, settings, layouts, shared, setShared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, notify, window } from "herdr";
+
+import { addonMethods } from "./addons.js";
 
 const I = (name) => `frame/settings/${name}.svg`;
 
 const SECTIONS = [
   { id: "look", title: "Look", icon: "palette" },
   { id: "features", title: "Features", icon: "sliders" },
+  { id: "claude", title: "Claude mods", icon: "puzzle" },
+  { id: "claude-tools", title: "Claude tools", icon: "sparkles" },
+  { id: "addons", title: "Add-ons", icon: "blocks" },
   ...(window()?.platform === "macos" ? [{ id: "keyboard", title: "Keyboard", icon: "keyboard" }] : []),
   { id: "machines", title: "Machines", icon: "server" },
   { id: "alerts", title: "Notifications", icon: "bell" },
@@ -34,17 +39,27 @@ const NOTE_KINDS = [
 // Settings → Features: what Zendr shows (settings.json `features.<id>`). Each is on
 // unless turned off, except those marked `off`. [id, title, about, off?]
 const FEATURE_GROUPS = [
-  ["Panels", [
+  ["Panels and toolbar", [
     ["hub", "Hub", "The Hub button in the toolbar and its drawer: the coordinator, every agent, and the messages between sessions."],
     ["bell", "Notifications button", "The Notifications button in the toolbar, with its unread count and the drawer."],
+    ["graph", "Source control graph", "The Graph button in the toolbar and its drawer: commits, branch lines, and each commit's files."],
+    ["code_view", "Explorer and code view", "The Explorer and Code buttons, and the code view beside the terminal."],
+    ["split_buttons", "New terminal buttons", "The toolbar buttons that open a terminal to the right or below. The keys work either way."],
+    ["arrange", "Arrange blocks", "The toolbar button that turns the panels into cards you drag to new places."],
   ]],
   ["Sidebar and sessions", [
     ["space_details", "Space details", "Under each space: the ports its programs listen on, its pull request and its session-bridge status."],
     ["agent_summaries", "What each agent is doing", "Each agent's current task and a one-line summary in the Sessions list."],
     ["agents_list", "Separate Agents list", "List agents again in their own section under the spaces, by priority or by space, instead of inside each space.", true],
     ["session_colors", "Session colours", "A colour on each session's row, tab and hub card."],
+    ["session_counts", "Session counts", "How many sessions each space has, and in all, beside the names. A folded space keeps its count."],
   ]],
   ["Code view and panes", [
+    ["code_edit", "Editing", "Edit mode in the code view: change files and save them. Off: the code view only shows files and their changes."],
+    ["file_icons", "File-type icons", "A coloured icon for each file's type in the explorer, the tabs, Changes and the graph."],
+    ["lang_detect", "Language detection", "Tell a file's language from a shebang, a modeline or its content when its name doesn't say."],
+    ["code_zoom", "Ctrl + mouse wheel zoom", "Make the code bigger or smaller with Ctrl and the mouse wheel, to see fewer or more lines."],
+    ["vscode_ext", "VS Code extensions", "Use the colour themes, code colours and languages of the VS Code extensions you have installed."],
     ["hints", "Shortcut hints", "The line of keyboard shortcuts under the code view."],
     ["pane_buttons", "Always show pane buttons", "Show a pane's header buttons all the time, not only when the pointer is over it.", true],
   ]],
@@ -56,13 +71,35 @@ const FEATURE_GROUPS = [
   ]],
 ];
 
+// Settings → Claude mods: Claude Code plugins from the claude-mods marketplace,
+// installed for this user (`claude plugin ...`). [name, title, about]
+const CLAUDE_MARKET = "claude-mods";
+// The Windows and Zendr support is on this branch until it's merged upstream.
+const CLAUDE_MARKET_SOURCE = "https://github.com/ruchira-edirisinghe/claude-mods.git#feat/zendr-windows";
+const DONE_WORDS = { "Turning off…": "Turned off", "Turning on…": "Turned on", "Installing…": "Installed", "Saving options…": "Saved" };
+const CLAUDE_MODS = [
+  ["next-steps", "Next steps", "After each reply, suggested next steps as buttons above the prompt. Press 1 to 4 in an empty prompt box, or click one."],
+  ["session-bridge", "Session bridge", "Running sessions message each other and hand off context, so one can plan or review while another builds. The hub uses it."],
+  ["model-router", "Model router", "Sorts each turn into mechanical, ordinary or hard, and gives it a matching reasoning effort (and model, if you allow it)."],
+];
+// `claude` with `input` on its stdin (exec has none): through the shell, with
+// the input passed as an argument, never as code.
+function claudeWithInput(args, input) {
+  if (window()?.platform === "windows") {
+    const quoted = (v) => `'${String(v).replace(/'/g, "''")}'`;
+    return exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+      `& { param($in) $in | claude ${args.map(quoted).join(" ")} } ${quoted(input)}`], { timeout: 60000 });
+  }
+  return exec("sh", ["-c", 'input="$1"; shift; printf "%s" "$input" | claude "$@"', "sh", input, ...args], { timeout: 60000 });
+}
+
 // Do not disturb ends at quiet_until (ms); "always" is far enough away.
 const FOREVER = 9e12;
 const clock = (ms) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
 // What the app uses when settings.json names no font (settings.rs).
 const DEFAULT_FONT = "JetBrains Mono";
-const DEFAULT_UI_FONT = "Geist";
+const DEFAULT_UI_FONT = "Google Sans";
 
 export default class Settings extends View {
   init(_props, cx) {
@@ -92,16 +129,30 @@ export default class Settings extends View {
     this.machineResults = {};
     this.machineEdit = null;
     this.machineNotice = null;
+    this.claude = null; // { plugins, configs, error } once read
+    this.claudeBusy = {}; // name -> what it's doing
+    this.claudeDone = {}; // name -> { text, until }: what just happened, said in place
+    this.claudeOpen = null; // the plugin whose options show
+    this.claudeInputs = {}; // "<name>.<key>" -> InputState for free-text options
+    this.addons = null; // addons/catalog.json's list once read
+    this.addonsError = null;
+    this.addonBusy = {}; // id -> what it's doing
+    this.addonView("claude"); this.addonView("general"); // their search boxes (inputs are made here, never in render)
     this.handle = cx.focus_handle();
     this.handle.focus();
     cx.spawn(async (cx) => {
       await this.load();
       if (this.section === "machines") await this.loadMachines();
+      if (this.section === "claude") await this.loadClaude();
+      if (this.section === "claude-tools" || this.section === "addons") await this.loadAddons();
       cx.notify();
     });
     // After "Check now": follow the look (the answer comes from the app), then
     // "Up to date" for a moment.
     cx.timer.every(300, (cx) => {
+      // A Claude mod's "Saved ✓" goes back to its state after a moment.
+      const over = Object.entries(this.claudeDone).filter(([, d]) => d.until <= Date.now());
+      if (over.length) { for (const [name] of over) delete this.claudeDone[name]; cx.notify(); }
       if (!this.asked) return;
       if (updates().checking) this.asked = Date.now();
       else if (Date.now() - this.asked >= 3000) this.asked = null;
@@ -775,6 +826,125 @@ export default class Settings extends View {
 
   // Alerts ---------------------------------------------------------------
 
+  // Claude mods ------------------------------------------------------------
+
+  // Reads which claude-mods plugins are installed and on, and their options.
+  async loadClaude() {
+    let list;
+    try {
+      const r = await exec("claude", ["plugin", "list", "--json"], { timeout: 60000 });
+      if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim() || `claude exited with ${r.code}`);
+      list = JSON.parse(r.stdout.slice(r.stdout.indexOf("[")));
+    } catch (e) {
+      this.claude = { plugins: {}, configs: {}, error: /ENOENT|not found|cannot find|No such file/i.test(String(e?.message ?? e))
+        ? "Claude Code isn't installed (no `claude` command). Install it from claude.com/claude-code, then come back."
+        : `Couldn't ask Claude Code: ${String(e?.message ?? e).slice(0, 300)}` };
+      return;
+    }
+    const plugins = {}, configs = {};
+    for (const [name] of CLAUDE_MODS) {
+      const p = list.find((x) => x.id === `${name}@${CLAUDE_MARKET}`);
+      if (!p) continue;
+      plugins[name] = { id: p.id, enabled: p.enabled !== false, version: p.version };
+      if (!p.hasUserConfig) continue;
+      try {
+        const r = await exec("claude", ["plugin", "configure", p.id, "--json"], { timeout: 60000 });
+        const c = JSON.parse(r.stdout.slice(r.stdout.indexOf("{")));
+        if (c?.schema) configs[name] = { schema: c.schema, inputs: c.inputs ?? {} };
+      } catch { /* its options stay hidden */ }
+    }
+    this.claude = { plugins, configs, error: null };
+    for (const [name, c] of Object.entries(configs)) {
+      for (const [key, field] of Object.entries(c.schema)) {
+        if (field.type !== "string" || field.options) continue;
+        const id = `${name}.${key}`;
+        if (!this.claudeInputs[id]) {
+          const input = InputState.new({ placeholder: String(field.default ?? "") });
+          const saveIt = (_e, cx) => {
+            const value = input.value().trim();
+            if (value !== (this.claude?.configs[name]?.inputs[key] ?? "")) this.configureClaude(name, { [key]: value }, cx);
+          };
+          input.on("blur", saveIt);
+          input.on("submit", saveIt);
+          this.claudeInputs[id] = input;
+        }
+        this.claudeInputs[id].set_value(String(c.inputs[key] ?? ""));
+      }
+    }
+  }
+
+  // Runs `claude plugin ...` steps for one plugin, then reads everything again.
+  claudeAct(name, doing, steps, cx) {
+    if (this.claudeBusy[name]) return;
+    this.claudeBusy[name] = doing;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const title = CLAUDE_MODS.find(([n]) => n === name)[1];
+      try {
+        for (const step of steps) {
+          const r = await step();
+          if (r && r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n").slice(-3).join(" ") || `claude exited with ${r.code}`);
+        }
+        this.claudeDone[name] = { text: DONE_WORDS[doing] ?? "Done", until: Date.now() + 3000 };
+      } catch (e) {
+        notify({ title: `Couldn't change ${title}`, body: String(e?.message ?? e).slice(0, 400), level: "error" });
+      }
+      delete this.claudeBusy[name];
+      await this.loadClaude();
+      cx.notify();
+    });
+  }
+
+  setClaudePlugin(name, on, cx) {
+    const p = this.claude?.plugins[name];
+    const id = `${name}@${CLAUDE_MARKET}`;
+    if (!on) return this.claudeAct(name, "Turning off…", [() => exec("claude", ["plugin", "disable", id, "--scope", "user"], { timeout: 60000 })], cx);
+    if (p) return this.claudeAct(name, "Turning on…", [() => exec("claude", ["plugin", "enable", id, "--scope", "user"], { timeout: 60000 })], cx);
+    this.claudeAct(name, "Installing…", [
+      async () => {
+        const r = await exec("claude", ["plugin", "marketplace", "list", "--json"], { timeout: 60000 });
+        let known = false;
+        try { known = JSON.parse(r.stdout.slice(r.stdout.indexOf("["))).some((m) => m.name === CLAUDE_MARKET); } catch { /* add it */ }
+        return known ? null : exec("claude", ["plugin", "marketplace", "add", CLAUDE_MARKET_SOURCE], { timeout: 180000 });
+      },
+      () => exec("claude", ["plugin", "install", id, "--scope", "user"], { timeout: 180000 }),
+    ], cx);
+  }
+
+  configureClaude(name, values, cx) {
+    const c = this.claude?.configs[name];
+    if (c) Object.assign(c.inputs, values);
+    this.claudeAct(name, "Saving options…", [() => claudeWithInput(["plugin", "configure", `${name}@${CLAUDE_MARKET}`, "--values-stdin"], JSON.stringify(values))], cx);
+  }
+
+  claudeMods(t) {
+    const c = this.claude;
+    const intro = div().pb(14).text_size(12.5).line_height("18px").text_color(t.dim)
+      .child("Claude Code plugins that Zendr works with. They run inside Claude Code, in every session you start here or in another terminal. Changes reach new sessions; restart running ones.");
+    if (!c) return v_flex().w_full().child(intro).child(div().py(12).text_size(13).text_color(t.dim).child("Asking Claude Code…"));
+    if (c.error) return v_flex().w_full().child(intro).child(div().py(12).text_size(13).text_color(t.blocked).child(c.error));
+    return v_flex().w_full().child(intro).children(CLAUDE_MODS.map(([name, title, about]) => {
+      const p = c.plugins[name], busy = this.claudeBusy[name], cfg = c.configs[name];
+      const done = this.claudeDone[name]?.until > Date.now() ? `${this.claudeDone[name].text} ✓` : null;
+      const state = busy ?? done ?? (!p ? "Not installed" : p.enabled ? `On · v${p.version}` : `Off · v${p.version}`);
+      const control = h_flex().gap(10).items_center()
+        .child(div().text_size(11.5).text_color(busy || done || p?.enabled ? t.accent : t.dim).child(state))
+        .when(Boolean(p && cfg), (el) => el.child(this.button(t, `st-c-opt-${name}`, this.claudeOpen === name ? "Hide options" : "Options", (_e, cx) => { this.claudeOpen = this.claudeOpen === name ? null : name; cx.notify(); })))
+        .child(this.toggle(t, `st-c-${name}`, Boolean(p?.enabled), (_e, cx) => this.setClaudePlugin(name, !p?.enabled, cx)));
+      const card = v_flex().w_full().child(this.row(t, title, about, control));
+      if (this.claudeOpen !== name || !cfg) return card;
+      return card.child(v_flex().w_full().pl(18).pb(10).border_l(2).border_color(t.accent + "55").children(Object.entries(cfg.schema).map(([key, field]) => {
+        const now = String(cfg.inputs[key] ?? "") || String(field.default ?? "");
+        let input;
+        if (field.type === "boolean") input = this.toggle(t, `st-c-${name}-${key}`, now === "true", (_e, cx) => this.configureClaude(name, { [key]: now === "true" ? "false" : "true" }, cx));
+        else if (field.options) input = this.choice(t, `st-c-${name}-${key}`, field.options.map((o) => [o, o]), now, (v, cx) => this.configureClaude(name, { [key]: v }, cx));
+        else input = div().w(240).px(8).rounded(7).border_1().border_color(t.border).bg(t.background).text_size(13)
+          .child(Input.new(this.claudeInputs[`${name}.${key}`]).h(28).text_color(t.foreground));
+        return this.row(t, field.title ?? key, field.description, input);
+      })));
+    }));
+  }
+
   // Features ---------------------------------------------------------------
 
   features(t) {
@@ -828,6 +998,18 @@ export default class Settings extends View {
               }),
             ),
         ),
+      )
+      .child(
+        v_flex()
+          .w_full()
+          .pb(18)
+          .child(this.heading(t, "Claude Code mods"))
+          .child(this.row(t, "Next steps, session bridge and model router", "Claude Code plugins Zendr works with. Turn each on or off and set its options.",
+            this.button(t, "st-f-claude", "Open Claude mods", (_e, cx) => { this.section = "claude"; cx.spawn(async (cx) => { await this.loadClaude(); cx.notify(); }); cx.notify(); })))
+          .child(this.row(t, "Claude tools and add-ons from the community", "Dozens of tools from the Herdr gallery, all off until you pick them: usage limits, session search, prompt timelines, runners, notes and more.",
+            h_flex().gap(8)
+              .child(this.button(t, "st-f-tools", "Claude tools", (_e, cx) => { this.section = "claude-tools"; cx.spawn(async (cx) => { await this.loadAddons(); cx.notify(); }); cx.notify(); }))
+              .child(this.button(t, "st-f-addons", "Add-ons", (_e, cx) => { this.section = "addons"; cx.spawn(async (cx) => { await this.loadAddons(); cx.notify(); }); cx.notify(); })))),
       );
   }
 
@@ -1180,6 +1362,8 @@ export default class Settings extends View {
               this.machineEdit = null;
               this.handle.focus();
               if (s.id === "machines") cx.spawn(async (cx) => { await this.loadMachines(); cx.notify(); });
+              if (s.id === "claude") cx.spawn(async (cx) => { await this.loadClaude(); cx.notify(); });
+              if (s.id === "claude-tools" || s.id === "addons") cx.spawn(async (cx) => { await this.loadAddons(); cx.notify(); });
               cx.notify();
             })
             .child(svg(I(s.icon)).size(15).text_color(on ? t.accent : t.dim))
@@ -1247,6 +1431,12 @@ export default class Settings extends View {
                         ? this.machines(t)
                       : this.section === "features"
                         ? this.features(t)
+                      : this.section === "claude"
+                        ? this.claudeMods(t)
+                      : this.section === "claude-tools"
+                        ? this.addonsPage(t, "claude")
+                      : this.section === "addons"
+                        ? this.addonsPage(t, "general")
                       : this.section === "alerts"
                         ? this.alerts(t)
                         : this.section === "privacy"
@@ -1259,3 +1449,5 @@ export default class Settings extends View {
       );
   }
 }
+
+Object.assign(Settings.prototype, addonMethods);

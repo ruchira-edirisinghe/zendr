@@ -263,6 +263,10 @@ Properties any node can have:
   another pane cancels. Zoomed tabs and one-pane tabs don't drag. The grip appears
   on top-edge hover, regardless of the header's position or presence. Only the grip
   starts dragging; header mods don't need drag handlers. `panes()` exposes `movable`.
+  Arrange mode (`layout.arrange`) moves whole blocks (docks) the same way: the first
+  row/column marked `"movable": true`, else the one holding the tab block, is where they
+  move. Its shown children are the docks (a child with `"movable": false` stays put); an
+  edge drop across its axis wraps the target in a new `dock-<n>` row/column.
 - `floating`: blocks over this node (below).
 - `window_drag: true`: dragging the node moves the window, a double-click
   maximizes it. A mod's own control inside opts out by stopping the press:
@@ -546,8 +550,10 @@ shortcuts must then be added by hand.
 ```
 
 - Sections: `global`, `layout:<name>` (while `layouts/<name>.json` shows),
-  `terminal` (a terminal has focus), `mod:<name>`. The more specific section
-  wins: `layout:terminals` over `global`, `terminal` over both.
+  `terminal` (a terminal has focus), `mod:<name>`, `input` (any text box or
+  code editor has focus; it beats the box's own keys, such as ctrl-f find).
+  The more specific section wins: `layout:terminals` over `global`, `terminal`
+  over both.
 - An action is a command (`name`, or `name:value`: the value fills the
   command's first argument), `send:<text>` (types into the terminal),
   `<mod>.<command>` (delivered to that mod's `nextCommand()`), or `terminal`
@@ -701,8 +707,10 @@ The main ones:
   `layout.resize {id, px | weight}`, `layout.select {stack, child}`, `layout.set {layout}`
   (personal tree edits; on shipped layouts only click/look fields change),
   `layout.reset {name?}` (reset a shipped layout and its clicks),
+  `layout.arrange {on?}` (arrange mode: the work area's blocks become cards to drag onto another
+  block's edge, or its middle to swap; personal layouts; the new tree is saved to the layout file),
   `layout.clone {name, as?}` (duplicate, then switch; default `<name>-copy`).
-- App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
+- App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.dock {name, into?, place?, size?}` (show its block once: into a stack, beside a node, or at a side), `mod.undock {name}` (take its blocks out of the layout and close its overlays), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `machines`, `alerts`, `updates`, `privacy`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;
   never one a package manager owns), `app.welcome`, `app.whats_new`, `app.feedback {message?, from?}` (from `"person"` or `"agent"`; opens a review window, where the person can paste up to 3 screenshots; never sends until the person clicks Send), `app.reset`,
