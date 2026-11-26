@@ -37,9 +37,22 @@ foreach ($section in $add.PSObject.Properties) {
 }
 [IO.File]::WriteAllText($keysPath, ($keys | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding $false))
 
-# Switch an open Zendr to the layout (a closed one picks it from Settings > Look).
+# Zendr starts on its layout unless you picked another one. Only a missing "layout" is
+# added; the rest of shared.json is kept exactly as it is.
+$sharedPath = Join-Path $config "shared.json"
+$shared = if (Test-Path -LiteralPath $sharedPath) { [IO.File]::ReadAllText($sharedPath).Trim() } else { "" }
+if ($shared -notmatch '"layout"\s*:') {
+    $shared = if ($shared -match '^\{\s*\}$' -or -not $shared) { '{"layout":"main-review"}' }
+              elseif ($shared.StartsWith("{")) { '{"layout":"main-review",' + $shared.Substring(1) }
+              else { $null }
+    if ($shared) { [IO.File]::WriteAllText($sharedPath, $shared, (New-Object Text.UTF8Encoding $false)) }
+}
+
+# Switch an open Zendr to the layout now. A closed one has nothing to switch: that's fine.
 $app = Join-Path $env:LOCALAPPDATA "Programs\herdr-app\herdr-app.exe"
 if (Test-Path -LiteralPath $app) {
-    & $app do layout.switch '{\"name\":\"main-review\"}' 2>$null | Out-Null
+    $ErrorActionPreference = "Continue"
+    try { & $app do layout.switch '{\"name\":\"main-review\"}' 2>&1 | Out-Null } catch { }
+    $ErrorActionPreference = "Stop"
 }
 Write-Host "Done. In Zendr: Settings > Look > main-review, if it didn't switch."
