@@ -105,6 +105,21 @@ PATH → zendr and hc
 The internal names come from Herdr (`herdr-app`, `hc`), so Herdr setups and tools keep working.
 </details>
 
+### On a Mac
+
+Download `Zendr-<version>-macos-arm64.tar.gz` (Apple silicon: M1 and later) from the [latest release](https://github.com/ruchira-edirisinghe/zendr/releases/latest), double-click it to unpack, then in Terminal:
+
+```sh
+cd ~/Downloads/Zendr-*-macos-arm64
+./install.sh
+```
+
+It puts **Zendr.app** in `~/Applications`, the core in `~/.local/bin` and Zendr's mods in `~/.config/herdr-app`, then opens Zendr. No admin rights needed. The Mac build is signed ad hoc, not by Apple, so the installer clears the download quarantine for it. An Intel build (`macos-x64`) is attached when one builds.
+
+### On your phone (Android)
+
+Install `Zendr-<version>-android.apk` from the [latest release](https://github.com/ruchira-edirisinghe/zendr/releases/latest) (Android asks once to allow installs from your browser or files app), then pair it from **Settings → Phone** on your computer. See [Zendr on your phone](#zendr-on-your-phone).
+
 <details>
 <summary><b>Update, or uninstall</b></summary>
 
@@ -286,6 +301,26 @@ Right-click a session, a tab or a hub card, or press <kbd>Ctrl</kbd> <kbd>Shift<
 **Settings → Claude mods** looks after the three [claude-mods](https://github.com/iddhi-sulakshana/claude-mods) plugins for Claude Code: **Next steps** (suggested next prompts as buttons), the **Session bridge** (sessions message each other; the hub uses it) and the **Model router** (each turn gets a matching reasoning effort). Turn each one on or off (Zendr installs it the first time), and open **Options** to change its settings. New Claude Code sessions pick up the changes.
 
 **Settings → Notifications** sets, for each kind of notification, whether it pops up, plays a sound and goes to the drawer. It also covers do not disturb, how long pop-ups stay, the badge (number, dot or nothing), how many notifications to keep, and whether rings and sidebar lines show.
+
+### Zendr on your phone
+
+The **Zendr app for Android** shows every session on your computers, says which ones need you, and lets you answer from anywhere: read the agent's screen, type a reply, or tap a key (**1**, **2**, **Enter**, **Esc**, **Ctrl+C**). Turn on **Alert me** and your phone buzzes when an agent needs you or finishes, even with the app closed.
+
+Your phone reaches your computer through [Tailscale](https://tailscale.com), a free private network that encrypts everything, so nothing on your computer is opened to the internet.
+
+```mermaid
+flowchart LR
+    phone["📱 Zendr app"] -- "Tailscale (encrypted)" --> pc["💻 Zendr, Settings → Phone"]
+    pc --> core["herdr-core: your terminals and agents"]
+```
+
+**Set it up once:**
+1. Install **Tailscale** on your computer and your phone ([tailscale.com/download](https://tailscale.com/download), free for personal use) and sign in to the same account on both.
+2. Install **Zendr-&lt;version&gt;-android.apk** on your phone.
+3. On your computer, open **Settings → Phone → Show pairing code**.
+4. In the app, tap **Add computer → Scan the code**. The 6-letter code under the QR code shows on both screens; they should match.
+
+Add as many computers as you like: pair each one the same way, and the app lists them all with how many sessions need you on each. **Unpair all phones** (on the computer) makes a new code, and phones paired with the old one stop working. The phone connection is off until you show a pairing code, answers only over Tailscale unless you choose **Allow local network**, and **Turn off** stops it.
 
 ### Community add-ons, off until you want them
 
