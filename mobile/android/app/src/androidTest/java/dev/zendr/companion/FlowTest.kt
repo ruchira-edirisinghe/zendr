@@ -122,10 +122,16 @@ class FlowTest {
 
             // Alert me: the service sees Claude go from working to needing you, and says so.
             compose.onNode(isToggleable()).performClick()
-            Thread.sleep(4000) // its first look: Claude is working
-            claudeNeedsYou = true
             val nm = context.getSystemService(NotificationManager::class.java)
-            val deadline = System.currentTimeMillis() + 45_000
+            // Wait for the service to be running, then give its first look (Claude is working)
+            // time to land before Claude starts needing you.
+            val started = System.currentTimeMillis() + 30_000
+            while (System.currentTimeMillis() < started &&
+                nm.activeNotifications.none { it.notification.extras.getString("android.title") == "Watching your agents" }
+            ) Thread.sleep(250)
+            Thread.sleep(4000)
+            claudeNeedsYou = true
+            val deadline = System.currentTimeMillis() + 60_000
             var alerted = false
             while (!alerted && System.currentTimeMillis() < deadline) {
                 alerted = nm.activeNotifications.any { it.notification.extras.getString("android.title") == "Claude Code needs you" }
