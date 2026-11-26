@@ -23,7 +23,7 @@ function findNode(node, id) {
 // The layout's work blocks a tab's menu shows or hides; the last one shown stays.
 const VIEWS = [["explorer", "file explorer", "panel-left"], ["code", "code reviewer", "file-text"], ["main", "terminal", "terminal"]];
 function viewItems() {
-  const root = layout(), present = VIEWS.filter(([id]) => findNode(root, id));
+  const root = layout(), present = VIEWS.filter(([id]) => findNode(root, id) && (id === "main" || features().code_view !== false));
   const shown = present.filter(([id]) => !findNode(root, id).hidden).length;
   return present.map(([id, name]) => findNode(root, id).hidden
     ? [`Show ${name}`, "layout.show", { id }]

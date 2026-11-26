@@ -291,7 +291,12 @@ export default class VsCode extends View {
       .when(!enabled, e => e.opacity(0.5)).when(Boolean(tip), e => e.tooltip(tip))
       .when(enabled, e => e.cursor_pointer().hover(s => s.opacity(0.85)).on_click((_e, cx) => action(cx))).child(label);
     let body;
-    if (this.loading) body = [div().p(24).text_color(t.dim).child("Looking for VS Code and its extensions…")];
+    // Settings → Features: VS Code extensions turned off.
+    if ((shared("zendr.features") ?? {}).vscode_ext === false) body = [v_flex().p(24).gap(12).items_start()
+      .child(div().text_size(13).text_color(t.foreground).child("VS Code extensions are turned off."))
+      .child(div().text_size(12).text_color(t.dim).child("Zendr isn't using their themes, code colours or languages. Turn them on again in Settings → Features."))
+      .child(button("vs-open-features", "Open Settings → Features", () => { closeOverlay(); run("app.settings", { section: "features" }); }, { accent: true }))];
+    else if (this.loading) body = [div().p(24).text_color(t.dim).child("Looking for VS Code and its extensions…")];
     else if (this.tab === "themes") {
       const rows = [];
       for (const ext of this.extensions) for (const th of ext.themes) if (match(th.label, ext.name)) rows.push([ext, th]);

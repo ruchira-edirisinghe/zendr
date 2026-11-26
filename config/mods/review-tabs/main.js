@@ -156,6 +156,9 @@ export default class Tabs extends View {
     // The hub turned off: the drawer stops showing it.
     const side = find(layout(), "side");
     if (side && f?.hub === false && !side.hidden && side.active === "hub") run("layout.hide", { id: "side" });
+    if (side && f?.graph === false && !side.hidden && side.active === "graph") run("layout.hide", { id: "side" });
+    // The code view turned off: its explorer and editor close.
+    if (f?.code_view === false) for (const id of ["explorer", "code"]) { const n = find(layout(), id); if (n && !n.hidden) run("layout.hide", { id }); }
     // Agents live in the Sessions list, under their spaces, unless the separate list is turned on.
     const list = find(layout(), "agents"), separate = f?.agents_list === true;
     if (list && Boolean(list.hidden) === separate) run(separate ? "layout.show" : "layout.hide", { id: "agents" });
@@ -370,16 +373,17 @@ export default class Tabs extends View {
         .on_size_change((_size, cx) => { if (active >= 0) { this.scroll.scroll_to_item(active); cx.notify(); } })
         .children(shown.map(item)))
       .child(button("tab-new", svg("mods/workspace-chrome/plus.svg").size(14), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), "New tab or terminal (Ctrl+Shift+T)"))
-      .child(button("split-right", svg("mods/review-file/icons/split.svg").size(14), () => run("pane.split", { direction: "right" }), "New terminal to the right (Ctrl+Shift+O)"))
-      .child(button("split-down", svg("mods/review-file/icons/split-down.svg").size(14), () => run("pane.split", { direction: "down" }), "New terminal below (Ctrl+Shift+E)"))
-      .child(button("arrange", svg("mods/review-file/icons/arrange.svg").size(14), () => run("layout.arrange"), "Arrange blocks: drag panels to new places (Esc when done)"))
+      .when(feature("split_buttons"), el => el
+        .child(button("split-right", svg("mods/review-file/icons/split.svg").size(14), () => run("pane.split", { direction: "right" }), "New terminal to the right (Ctrl+Shift+O)"))
+        .child(button("split-down", svg("mods/review-file/icons/split-down.svg").size(14), () => run("pane.split", { direction: "down" }), "New terminal below (Ctrl+Shift+E)")))
+      .when(feature("arrange"), el => el.child(button("arrange", svg("mods/review-file/icons/arrange.svg").size(14), () => run("layout.arrange"), "Arrange blocks: drag panels to new places (Esc when done)")))
       // The toolbar: every panel is a labelled toggle, lit while it's showing.
       .child(div().w(1).h(18).mx(5).flex_none().bg(t.border))
       .when(feature("command_search") || feature("ai_command"), el => el.child(toggle("commands", "mods/commands/workflow.svg", "Commands", false,
         "Command search: history, workflows and Ask AI (Ctrl+Shift+R)", () => openCommands(feature("command_search") ? "history" : "ai"))))
-      .when(Boolean(find(root, "explorer")), el => el.child(toggle("explorer", "mods/workspace-chrome/panel-left.svg", "Explorer", viewOn("explorer"),
+      .when(feature("code_view") && Boolean(find(root, "explorer")), el => el.child(toggle("explorer", "mods/workspace-chrome/panel-left.svg", "Explorer", viewOn("explorer"),
         "Show or hide the file explorer", () => run("layout.toggle", { id: "explorer" }))))
-      .when(Boolean(find(root, "code")), el => el.child(toggle("code", "mods/workspace-chrome/file-text.svg", "Code", viewOn("code"),
+      .when(feature("code_view") && Boolean(find(root, "code")), el => el.child(toggle("code", "mods/workspace-chrome/file-text.svg", "Code", viewOn("code"),
         "Show or hide the code reviewer", () => run("layout.toggle", { id: "code" }))))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
       .when(feature("graph") && Boolean(find(root, "graph")), el => el.child(toggle("graph", "mods/review-file/icons/graph.svg", "Graph", sideOn("graph"),

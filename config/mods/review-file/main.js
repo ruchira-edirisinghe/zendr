@@ -15,6 +15,9 @@ import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle, Edi
 import { props, exec, readTextFile, writeTextFile, watchFolder, theme, settings, window, nextCommand, run, panes, focused, spaces, shared, setShared, layout, appHome } from "herdr";
 import { detect, fileIcon, folderIcon, languages, loadExtras, PLAIN } from "./lang.js";
 
+// Settings → Features (on unless turned off): code_edit, code_zoom, file_icons, vscode_ext.
+const feature = (id) => (shared("zendr.features") ?? {})[id] !== false;
+
 // Reads write nothing under .git, so the folder watch doesn't wake us again.
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
 const MAX_LINES = 200000, MAX_COLUMNS = 2000, CONTEXT = 3, MAX_TABS = 24;
@@ -259,7 +262,7 @@ export default class ReviewFile extends View {
     cx.spawn(async cx => {
       await loadExtras().catch(() => 0);
       const text = await readTextFile(`${appHome()}/vscode/syntax.json`).catch(() => null);
-      try { const data = text && JSON.parse(text); if (data && data.enabled !== false && data.colors) this.vsSyntax = data.colors; } catch { /* ignored */ }
+      try { const data = text && JSON.parse(text); if (data && data.enabled !== false && data.colors && feature("vscode_ext")) this.vsSyntax = data.colors; } catch { /* ignored */ }
       for (const tab of this.tabs) if (!tab.langForced) tab.lang = detect(tab.path);
       cx.notify();
     });
@@ -534,7 +537,7 @@ export default class ReviewFile extends View {
     if (!tab) {
       tab = {
         key, path, rev: opts.rev ?? null, preview: !opts.pin, lang: detect(path), langForced: false, editor: null, dirty: false,
-        mode: opts.rev ? "review" : opts.mode ?? (this.isGit && this.marks[path] ? "review" : "edit"),
+        mode: opts.rev || !feature("code_edit") ? "review" : opts.mode ?? (this.isGit && this.marks[path] ? "review" : "edit"),
       };
       const preview = this.tabs.findIndex(t => t.preview && !t.dirty && t !== this.current);
       const currentPreview = this.current?.preview && !this.current.dirty ? this.tabs.indexOf(this.current) : -1;
@@ -615,6 +618,7 @@ export default class ReviewFile extends View {
     const tab = this.current;
     if (!tab || tab.mode === mode) return;
     if (tab.rev && mode === "edit") { this.flash("A commit's change can only be reviewed"); return; }
+    if (mode === "edit" && !feature("code_edit")) { this.flash("Editing is off: turn it on in Settings → Features"); return; }
     const line = tab.mode === "edit" ? tab.cursor?.line : this.currentLine();
     tab.mode = mode; this.first = true; this.pendingLine = line ?? null;
     this.show(tab, cx);
@@ -1022,6 +1026,7 @@ export default class ReviewFile extends View {
   }
   wheel(e, cx) {
     if (!e.modifiers?.control && !e.modifiers?.platform) return;
+    if (!feature("code_zoom")) return;
     let steps = 0;
     const lines = e.delta_lines?.y;
     if (lines) steps = Math.sign(lines);
@@ -1306,7 +1311,7 @@ export default class ReviewFile extends View {
   // A file's icon; a file whose name says nothing takes its detected language's.
   fileGlyph(path, size = 14, lang = null) {
     let f = fileIcon(path);
-    if (lang && lang !== PLAIN && f.icon.endsWith("/file.svg")) f = { icon: lang.icon, color: lang.color };
+    if (feature("file_icons") && lang && lang !== PLAIN && f.icon.endsWith("/file.svg")) f = { icon: lang.icon, color: lang.color };
     return svg(f.icon).size(size).flex_none().text_color(f.color);
   }
 
@@ -1404,7 +1409,7 @@ export default class ReviewFile extends View {
       .child(h_flex().flex_none().px(6).gap(2).items_center().border_l(1).border_color(t.border)
         .child(action("rf-open", ICON("search"), "Quick open a file (Ctrl+P)", cx => this.openPalette("files", cx)))
         .child(action("rf-split", ICON("split"), "Split the editor: this file in another code view (Ctrl+\\)", () => this.splitEditor()))
-        .child(action("rf-vscode", ICON("puzzle"), "VS Code extensions: themes, code colours and file types", () => run("mod.open", { name: "vscode" })))
+        .when(feature("vscode_ext"), e => e.child(action("rf-vscode", ICON("puzzle"), "VS Code extensions: themes, code colours and file types", () => run("mod.open", { name: "vscode" }))))
         .child(action("rf-keys", ICON("keyboard"), "Keyboard shortcuts (F1)", cx => { this.showKeys = !this.showKeys; cx.notify(); })));
   }
 
@@ -1428,7 +1433,7 @@ export default class ReviewFile extends View {
         .when(Boolean(tab?.readonly), e => e.child(div().flex_none().px(6).h(18).rounded(5).flex().items_center().text_size(10.5).bg(t.raised).text_color(t.dim).child("Read-only"))))
       .when(Boolean(tab), e => e.child(this.segments(t, [
         ["rf-mode-review", "Review", ICON("diff"), "See the changes inline (Ctrl+E)", mode === "review", cx => this.setMode("review", cx)],
-        ["rf-mode-edit", "Edit", ICON("pencil"), tab?.rev ? "A commit's change can only be reviewed" : "Edit the file (Ctrl+E)", mode === "edit", cx => this.setMode("edit", cx), !tab?.rev],
+        ...(feature("code_edit") || mode === "edit" ? [["rf-mode-edit", "Edit", ICON("pencil"), tab?.rev ? "A commit's change can only be reviewed" : "Edit the file (Ctrl+E)", mode === "edit", cx => this.setMode("edit", cx), !tab?.rev]] : []),
       ])))
       .when(Boolean(tab) && mode === "review", e => e
         .child(h_flex().flex_none().gap(6).items_center().text_size(11.5)

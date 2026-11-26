@@ -5,7 +5,10 @@
 // then the content (a #! line, an editor modeline, or a telling first line).
 // VS Code's installed extensions can add languages and file associations (mods/vscode writes
 // them to vscode/languages.json; loadExtras() reads it).
-import { readTextFile, appHome } from "herdr";
+import { readTextFile, appHome, shared } from "herdr";
+
+// Settings → Features: file_icons, lang_detect and vscode_ext are on unless turned off.
+const feature = (id) => (shared("zendr.features") ?? {})[id] !== false;
 
 // The Seti palette: readable on dark and light themes alike.
 export const SETI = {
@@ -158,7 +161,7 @@ export function find(word) {
 
 // The language of a file: the name, then (for names that say nothing) its text.
 export function detect(path, text) {
-  return byPath(path) ?? sniff(text) ?? PLAIN;
+  return byPath(path) ?? (feature("lang_detect") ? sniff(text) : null) ?? PLAIN;
 }
 
 // Every language, by name, for the picker.
@@ -168,6 +171,7 @@ export function languages() {
 
 // A file's icon and colour, as VS Code's Seti theme draws them.
 export function fileIcon(path) {
+  if (!feature("file_icons")) return { icon: icon("file"), color: C.grey };
   const name = baseName(path), lower = name.toLowerCase();
   if (LOCKS.has(lower)) return { icon: icon("lock"), color: C.grey };
   if (PACKAGES[lower]) return { icon: icon("package"), color: PACKAGES[lower] };
@@ -188,6 +192,7 @@ export const folderIcon = (open) => icon(open ? "folder-open" : "folder");
 // Read once from vscode/languages.json, which mods/vscode writes when it's turned on.
 let extrasLoaded = null;
 export function loadExtras() {
+  if (!feature("vscode_ext")) return Promise.resolve(0);
   extrasLoaded ??= (async () => {
     const text = await readTextFile(`${appHome()}/vscode/languages.json`).catch(() => null);
     if (!text) return 0;
