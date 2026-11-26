@@ -31,7 +31,7 @@ function place(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
-const rowHeight = ({ tree }, meta) => (tree ? 28 : 30) + (meta ? 15 : 0);
+const rowHeight = ({ tree }, meta) => (tree ? 32 : 36) + (meta ? 16 : 0);
 // Listening TCP ports under each root process (its whole process tree), as JSON {pid: [port]}.
 const PORTS_PS = (roots) => `$kids=@{};foreach($p in Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId){$kids[[int]$p.ParentProcessId]+=@([int]$p.ProcessId)};$listen=@{};foreach($l in (netstat -ano -p TCP)+(netstat -ano -p TCPv6)){if($l -match '^\\s*TCP\\s+\\S+:(\\d+)\\s+\\S+\\s+LISTENING\\s+(\\d+)'){$listen[[int]$Matches[2]]+=@([int]$Matches[1])}};$out=@{};foreach($r in @(${roots.join(",")})){$ports=@();$todo=New-Object System.Collections.Generic.Queue[int];$todo.Enqueue($r);$seen=@{};while($todo.Count){$x=$todo.Dequeue();if($seen.ContainsKey($x)){continue};$seen[$x]=1;if($listen.ContainsKey($x)){$ports+=$listen[$x]};if($kids.ContainsKey($x)){foreach($k in $kids[$x]){$todo.Enqueue($k)}}};$out["$r"]=@($ports|Where-Object{$_}|Sort-Object -Unique)};$out|ConvertTo-Json -Compress`;
 const RAIL_CELL = 32;
@@ -72,6 +72,11 @@ const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b
 // Newer pictographs such as 🖥 may be drawn as emoji without VS16. A trailing
 // selector, modifier or joiner can signal that we matched only part of a glyph.
 const EMOJI = /^(?:[#*0-9]\uFE0F?\u20E3|\p{Regional_Indicator}{2}|(?:\p{Emoji_Presentation}|(?=[\u{1F000}-\u{1FFFF}])\p{Extended_Pictographic}|\p{Extended_Pictographic}(?=\uFE0F)|\p{Emoji_Modifier_Base}(?=\p{Emoji_Modifier}))\uFE0F?[\p{Emoji_Modifier}\u{E0020}-\u{E007F}]*(?:\u200D\p{Extended_Pictographic}\uFE0F?\p{Emoji_Modifier}?)*)(?![\p{Grapheme_Extend}\p{Emoji_Modifier}\u200D])/u;
+// A space's own colour (shared "space.colors"), as a hex for tints.
+function spaceFill(w, t) {
+  const color = (shared("space.colors") ?? {})[w.id] ?? "ansi6";
+  return color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+}
 function spaceAvatar(name) {
   return EMOJI.exec(name)?.[0] ?? ([...name][0]?.toUpperCase() ?? "?");
 }
@@ -236,9 +241,9 @@ export default class Spaces extends View {
     const quiet = !on && (status === "idle" || !status);
     return h_flex()
       .id(`session-${tab.id}`)
-      .ml(18).pl(9).pr(8)
-      .when(Boolean(summary), el => el.py(5)).when(!summary, el => el.h(30))
-      .flex_none().gap(9).items_center().rounded(8).cursor_pointer()
+      .pl(10).pr(10)
+      .when(Boolean(summary), el => el.py(8)).when(!summary, el => el.h(34))
+      .flex_none().gap(10).items_center().rounded(8).cursor_pointer()
       .when(!tint, el => el.when(on, el => el.bg(t.selected)).hover(s => s.bg(t.hover)))
       .when(Boolean(tint), el => el.border_1().bg(tint + (on ? "42" : "14")).border_color(on ? tint + "cc" : "#00000000")
         .hover(s => s.bg(tint + (on ? "4d" : "2e"))))
@@ -253,7 +258,7 @@ export default class Spaces extends View {
         openOverlay({ mod: "session-color", kind: "popup", width: 268, props: { kind: "agent", id: address, name } });
       }))
       .child(pic)
-      .child(v_flex().flex_1().min_w(0).gap(1)
+      .child(v_flex().flex_1().min_w(0).gap(3)
         .child(div().truncate().text_size(13).text_color(quiet ? t.muted : t.foreground).when(on, el => el.font_medium()).child(name))
         .when(Boolean(summary), el => el.child(div().truncate().text_size(11.5).text_color(status === "blocked" ? t.blocked : t.dim).child(summary))))
       .when(Boolean(badge), el => el.child(badge))
@@ -265,10 +270,14 @@ export default class Spaces extends View {
     const head = this.row(r, t);
     if (!nesting()) return head;
     const tabs = r.w.tabs ?? [];
-    if (!tabs.length || this.foldedSpaces.has(r.w.id)) return head;
-    return v_flex().flex_none().gap(2).pb(4)
+    // Spaces after the first are set apart by a divider and some room.
+    const group = v_flex().flex_none().gap(6).pb(12).when(r.i > 0, el => el.child(div().h(1).mx(4).mb(8).flex_none().bg(t.border)));
+    if (!tabs.length || this.foldedSpaces.has(r.w.id)) return group.child(head);
+    // The sessions hang off a guide line in the space's own colour, under its badge.
+    return group
       .child(head)
-      .children(tabs.map(tab => { const lead = leads.get(tab.id); return this.session(r.w, tab, lead, lead?.terminal ? byPane.get(lead.terminal) : null, t); }));
+      .child(v_flex().flex_none().ml(19).pl(9).gap(5).border_l(2).border_color(spaceFill(r.w, t) + "70")
+        .children(tabs.map(tab => { const lead = leads.get(tab.id); return this.session(r.w, tab, lead, lead?.terminal ? byPane.get(lead.terminal) : null, t); })));
   }
 
   // Ports: each local terminal's process (hc get), then one PowerShell look at every
@@ -717,7 +726,7 @@ export default class Spaces extends View {
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
-      .px(8)
+      .px(10)
       .h(rowHeight({ tree }, meta))
       .flex_none()
       .justify_center()
@@ -759,13 +768,15 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child(spaceAvatar(w.name))))
+          .when(!tree, el => el.child(h_flex().size(20).flex_none().rounded(6).bg(fill).items_center().justify_center().text_size(11).font_bold().text_color("#ffffff").child(spaceAvatar(w.name))))
           .child(div().flex_initial().min_w(SIDE_MIN).truncate().text_size(13.5).font_medium().text_color(t.foreground).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
-          .when(folded, el => el.child(div().flex_none().text_size(11).text_color(t[top] ?? t.dim).child(`${w.tabs.length}`)))
+          .when(nest, el => el.child(div().flex_none().min_w(18).h(18).px(5).rounded(9).flex().items_center().justify_center()
+            .bg(folded && top ? t[top] + "26" : t.raised).text_size(10.5).font_semibold().text_color(folded && top ? t[top] : t.muted)
+            .tooltip(`${w.tabs.length} session${w.tabs.length === 1 ? "" : "s"}`).child(`${w.tabs.length}`)))
           .when(nest, el => el.child(chevron)),
       )
-      .when(Boolean(meta), el => el.child(meta.pl(tree ? 44 : 27)));
+      .when(Boolean(meta), el => el.child(meta.pl(tree ? 44 : 30)));
   }
 
   compact({ w, i }, t) {
@@ -808,12 +819,15 @@ export default class Spaces extends View {
       if (this.activeAt >= 0) this.scroll.scroll_to_item(this.activeAt);
     }
     return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
-      .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11.5).text_color(t.dim)
+      .child(h_flex().h(38).pl(18).pr(10).items_center().justify_between().text_size(11.5).text_color(t.dim)
         .when(collapsed, el => el.pl(0).pr(0).justify_center())
-        .when(!collapsed, el => el.child(div().text_size(12).font_semibold().text_color(t.muted).child(nesting() ? "Sessions" : "Spaces")))
+        .when(!collapsed, el => el.child(h_flex().gap(7).items_center()
+          .child(div().text_size(12).font_semibold().text_color(t.muted).child(nesting() ? "Sessions" : "Spaces"))
+          .child(div().h(17).px(6).rounded(9).flex().items_center().bg(t.raised).text_size(10.5).text_color(t.dim)
+            .child(String(nesting() ? sp.reduce((n, w) => n + (w.tabs ?? []).length, 0) : sp.length)))))
         .child(div().id("space-new").tooltip("New space").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
-      .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).pb(14).overflow_y_scrollbar().mode("always").track_scroll(this.scroll)
+      .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 10).pt(collapsed ? 0 : 2).pb(14).overflow_y_scrollbar().mode("always").track_scroll(this.scroll)
         // A block above (another mod's) growing, or the window resizing, shrinks this list and can push the active space out.
         .on_size_change((_size, cx) => { if (this.activeAt >= 0) { this.scroll.scroll_to_item(this.activeAt); cx.notify(); } })
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
