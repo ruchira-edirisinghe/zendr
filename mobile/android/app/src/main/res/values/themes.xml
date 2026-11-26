@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Zendr" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/zendr_background</item>
+        <item name="android:statusBarColor">@color/zendr_background</item>
+        <item name="android:navigationBarColor">@color/zendr_background</item>
+    </style>
+</resources>

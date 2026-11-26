@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zendr on a computer answers plain HTTP on its Tailscale address, which Tailscale already
+     encrypts end to end (WireGuard). Addresses differ per person, so cleartext can't be limited
+     to a fixed domain list. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
