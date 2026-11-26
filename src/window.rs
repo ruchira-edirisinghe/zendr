@@ -8,6 +8,7 @@ use crate::hc::Core;
 mod floats;
 mod movable;
 mod pane_drag;
+mod dock_drag;
 mod pane_size;
 mod titlebar;
 
@@ -397,6 +398,9 @@ pub struct AppWindow {
     swapped: HashMap<String, String>,
     float_drag: Option<floats::FloatDrag>,
     pane_drag: Option<pane_drag::PaneDrag>,
+    /// Arrange mode (`layout.arrange`): the work area's blocks drag as cards.
+    arranging: bool,
+    dock_drag: Option<dock_drag::DockDrag>,
     pane_grip_hover: Option<String>,
     /// Each pane's top row the grip sits centered in: its top header, else a strip.
     pane_grip_rows: RefCell<HashMap<String, f32>>,
@@ -535,6 +539,8 @@ impl AppWindow {
             swapped: HashMap::new(),
             float_drag: None,
             pane_drag: None,
+            arranging: false,
+            dock_drag: None,
             pane_grip_hover: None,
             pane_grip_rows: RefCell::default(),
             win_drag: None,
@@ -1099,6 +1105,8 @@ impl AppWindow {
         self.save();
         self.float_drag = None;
         self.pane_drag = None;
+        self.arranging = false;
+        self.dock_drag = None;
         self.float_anims.clear();
         self.float_reveal.clear();
         self.float_hover.clear();
@@ -3599,6 +3607,75 @@ impl AppWindow {
                 }
                 self.sync_folders(window, cx);
             }
+            // Settings' add-ons switch: show a mod where its mod.json asks (once), or take every copy out.
+            "mod.dock" => {
+                let name = Self::arg(a, "name").unwrap_or_default().to_owned();
+                // A folder copied in a moment ago: a first sighting docks it by itself.
+                self.sync_folders(window, cx);
+                let Some(f) = self.folders.get(&name) else { return self.fail(format!("no mod folder {name:?}")) };
+                // `into`: a stack takes it as a child (its id is the mod's name, for layout.select);
+                // any other node gets it beside, in a row. Else `place`, else mod.json's place.
+                let into = Self::owned(a, "into");
+                let place = Self::owned(a, "place").or_else(|| f.hint.place.clone()).unwrap_or_else(|| "right".into());
+                let size = a.get("size").and_then(Value::as_f64).map(|v| v as f32).or(f.hint.size).unwrap_or(320.0);
+                let has_view = f.has_view;
+                let shown = self.chrome.walk().iter().any(|n| matches!(n.content(), Some(Content::Mod { name: m, .. }) if *m == name));
+                if has_view && (into.is_some() || place != "none") && !shown {
+                    if shipped_layouts().contains(&self.layout_name.as_str()) {
+                        return self.fail("Zendr's own layouts can't take new blocks: clone one first");
+                    }
+                    let id = if self.chrome.find(&name).is_none() { name.clone() } else { self.model.fresh_id("b") };
+                    let mut block = Node::block(id, Content::Mod { name: name.clone(), props: Value::Null });
+                    match into.as_deref() {
+                        Some(target) => {
+                            let Some(t) = self.chrome.find(target) else { return self.fail(format!("no layout node {target:?}")) };
+                            if matches!(t.kind, Kind::Stack { .. }) {
+                                self.chrome.find_mut(target).and_then(Node::children_mut).map(|c| c.push(block));
+                            } else {
+                                block.size = Some(Span::Px { px: size });
+                                let wrapper = self.model.fresh_id("r");
+                                self.chrome.split(target, Axis::Row, block, wrapper);
+                                // The node it went beside fills what's left of the row (a status bar's
+                                // fixed 28 px height would otherwise become its width).
+                                if let Some(n) = self.chrome.find_mut(target) { n.size = Some(Span::Weight { weight: 1.0 }); }
+                            }
+                        }
+                        None => {
+                            block.size = Some(Span::Px { px: size });
+                            dock(&mut self.chrome, block, &place, self.model.fresh_id("r"));
+                        }
+                    }
+                    self.seen.insert(name);
+                    self.reset_divider_interaction();
+                    self.save();
+                    self.sync(window, cx);
+                }
+            }
+            "mod.undock" => {
+                let name = Self::arg(a, "name").unwrap_or_default().to_owned();
+                let ids: Vec<String> = self.chrome.walk().iter()
+                    .filter(|n| matches!(n.content(), Some(Content::Mod { name: m, .. }) if *m == name))
+                    .map(|n| n.id.clone()).collect();
+                // Its overlays go too: a popup or a hidden tracker it keeps open would otherwise
+                // outlive the mod's folder.
+                let overlays: Vec<String> = self.overlays.iter()
+                    .filter(|o| o.layout.is_none() && self.copies.get(&o.slot).is_some_and(|c| c.inst.name == name))
+                    .map(|o| o.id.clone()).collect();
+                for id in &overlays {
+                    self.close_overlay(id, window, cx);
+                }
+                if !ids.is_empty() {
+                    if shipped_layouts().contains(&self.layout_name.as_str()) {
+                        return self.fail("Zendr's own layouts can't lose blocks: clone one first");
+                    }
+                    for id in &ids {
+                        self.chrome.remove(id);
+                    }
+                    self.reset_divider_interaction();
+                    self.save();
+                    self.sync(window, cx);
+                }
+            }
             "layout.set" if shipped_layouts().contains(&self.layout_name.as_str()) => {
                 let n = match serde_json::from_value::<Node>(a.get("layout").cloned().unwrap_or_default()) {
                     Ok(n) => n,
@@ -3675,6 +3752,12 @@ impl AppWindow {
                 if name == self.layout_name {
                     self.load_layout(&name);
                     self.apply_look(window, cx);
+                }
+            }
+            "layout.arrange" => {
+                let on = a.get("on").and_then(Value::as_bool).unwrap_or(!self.arranging);
+                if let Err(e) = self.set_arranging(on, cx) {
+                    return self.fail(e);
                 }
             }
             "layout.select" => {
@@ -4520,6 +4603,11 @@ impl AppWindow {
         let mut layout_changed = false;
         for (id, f) in &self.folders {
             let place = f.hint.place.as_deref().unwrap_or("right");
+            // Settings' add-ons (addons/<addon>/mods/<id>) are placed by their switch (mod.dock).
+            if is_addon_mod(id) {
+                self.seen.insert(id.clone());
+                continue;
+            }
             if !f.has_view || (shipped && place != "none") || !self.seen.insert(id.clone()) {
                 continue;
             }
@@ -5495,6 +5583,12 @@ fn fill_ids(n: &mut Node, m: &mut Model) {
     n.fill_ids(&mut || m.fresh_id("n"));
 }
 
+/// A mod that came from Settings' add-ons: some addons/<addon>/mods/<name> exists.
+fn is_addon_mod(name: &str) -> bool {
+    let Ok(dirs) = std::fs::read_dir(crate::mods::app_dir().join("addons")) else { return false };
+    dirs.flatten().any(|d| d.path().join("mods").join(name).join("mod.json").is_file())
+}
+
 /// Puts a block along one side of the chrome.
 fn dock(root: &mut Node, block: Node, place: &str, wrapper_id: String) {
     let axis = if matches!(place, "top" | "bottom") { Axis::Column } else { Axis::Row };
@@ -5508,8 +5602,16 @@ fn dock(root: &mut Node, block: Node, place: &str, wrapper_id: String) {
     let toast = old.toast.take();
     let terminal_menu = old.terminal_menu.take();
     let link_handlers = std::mem::take(&mut old.link_handlers);
+    // The other root-only fields go up too: left inside, a custom titlebar would turn back
+    // into the system one.
+    let (titlebar, traffic_lights) = (old.titlebar.take(), old.traffic_lights.take());
+    let (preview, cloned_from) = (old.preview.take(), old.cloned_from.take());
     let children = if first { vec![block, old] } else { vec![old, block] };
     let mut wrapper = Node::container(wrapper_id, axis, children);
+    wrapper.titlebar = titlebar;
+    wrapper.traffic_lights = traffic_lights;
+    wrapper.preview = preview;
+    wrapper.cloned_from = cloned_from;
     wrapper.toast = toast;
     wrapper.terminal_menu = terminal_menu;
     wrapper.link_handlers = link_handlers;
@@ -5690,6 +5792,7 @@ impl Render for AppWindow {
         let tracker = self.float_tracker(cx);
         let win_tracker = self.window_tracker(cx);
         let pane_drag = self.pane_drag_layer(cx);
+        let arrange = self.arrange_layer(cx);
         div()
             .id("herdr")
             .track_focus(&self.focus)
@@ -5741,6 +5844,8 @@ impl Render for AppWindow {
                     if this.pane_drag.is_some() {
                         this.cancel_pane_drag(cx);
                         cx.stop_propagation();
+                    } else if this.cancel_dock_drag(cx) {
+                        cx.stop_propagation();
                     } else if cx.stop_active_drag(window) {
                         cx.stop_propagation();
                     }
@@ -5767,6 +5872,7 @@ impl Render for AppWindow {
                 this.finish_divider_drag(window, cx);
             }))
             .child(tree)
+            .children(arrange)
             .children(overlays)
             .children(tracker)
             .children(win_tracker)
@@ -5828,6 +5934,23 @@ fn reconcile_core_update_error(dismissed: &mut Option<String>, core: &crate::upd
 mod tests {
     use gpui::{div, point, px, size, Context, IntoElement, Render, TestAppContext, Window};
     use gpui::prelude::*;
+
+    #[test]
+    fn docking_at_the_root_keeps_the_custom_titlebar() {
+        use crate::layout::{Content, Node, Titlebar};
+        let mut root: Node = serde_json::from_value(serde_json::json!({
+            "id": "root", "type": "row", "titlebar": "none", "traffic_lights": [12, 16], "toast": "t",
+            "children": [{"id": "a", "type": "block", "content": {"tab": "active"}}]
+        })).unwrap();
+        let block = Node::block("pets", Content::Mod { name: "pets".into(), props: serde_json::Value::Null });
+        super::dock(&mut root, block, "bottom", "r1".into());
+        assert_eq!(root.id, "r1");
+        assert_eq!(root.titlebar, Some(Titlebar::Layout));
+        assert_eq!(root.traffic_lights, Some([12.0, 16.0]));
+        assert_eq!(root.toast.as_deref(), Some("t"));
+        let inner = root.find("root").unwrap();
+        assert!(inner.titlebar.is_none() && inner.traffic_lights.is_none());
+    }
 
     #[test]
     fn close_only_walks_hidden_children_on_older_cores() {

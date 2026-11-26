@@ -428,6 +428,25 @@ Duplicate a mod as <name>-copy (or as).
 | `name` | yes |
 | `as` | no |
 
+## `mod.dock`
+
+Show a mod's block (once): into a stack or beside a node (`into`), else at `place` or where its mod.json places it (personal layouts).
+
+| Argument | Required |
+|---|---|
+| `name` | yes |
+| `into` | no |
+| `place` | no |
+| `size` | no |
+
+## `mod.undock`
+
+Take every block of a mod out of the layout (personal layouts) and close its overlays.
+
+| Argument | Required |
+|---|---|
+| `name` | yes |
+
 ## `layout.set`
 
 Replace a personal layout tree; shipped layouts accept only click/look fields (not structure).
@@ -469,6 +488,14 @@ Size a layout node.
 | `id` | yes |
 | `px` | no |
 | `weight` | no |
+
+## `layout.arrange`
+
+Arrange mode: drag the work area's blocks onto each other's edges to move them (personal layouts).
+
+| Argument | Required |
+|---|---|
+| `on` | no |
 
 ## `layout.select`
 

@@ -164,6 +164,13 @@
       ]
     },
     {
+      "name": "Google Sans font",
+      "source": "https://github.com/googlefonts/googlesans; \"Google\" and \"Google Sans\" are trademarks of Google LLC.",
+      "files": [
+        "assets/fonts/OFL-GoogleSans.txt"
+      ]
+    },
+    {
       "name": "JetBrains Mono fonts",
       "source": "https://github.com/JetBrains/JetBrainsMono",
       "files": [

@@ -881,11 +881,89 @@ fn exec_limit(options: Option<&HostValue>) -> Result<Duration, HostError> {
     }
 }
 
+/// Mods written on macOS and Linux call `sh`, `grep`, `python3` and friends. On Windows
+/// those come from Git for Windows (its usr\bin, appended to PATH so Windows' own tools
+/// still win) and the `py` launcher (the `python3` on PATH is often the Store stub).
+#[cfg(windows)]
+mod unix_tools {
+    use std::ffi::OsString;
+    use std::path::{Path, PathBuf};
+    use std::sync::OnceLock;
+
+    fn find(name: &str) -> Option<PathBuf> {
+        let path = std::env::var_os("PATH")?;
+        let bare = Path::new(name).extension().is_none();
+        for dir in std::env::split_paths(&path) {
+            for ext in [".exe", ".com", ""] {
+                if ext.is_empty() && bare {
+                    continue;
+                }
+                let p = dir.join(format!("{name}{ext}"));
+                if p.is_file() {
+                    return Some(p);
+                }
+            }
+        }
+        None
+    }
+
+    fn git_usr_bin() -> Option<&'static PathBuf> {
+        static DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+        DIR.get_or_init(|| {
+            let from_git = find("git").and_then(|g| g.parent()?.parent().map(|root| root.join("usr").join("bin")));
+            from_git
+                .into_iter()
+                .chain([PathBuf::from(r"C:\Program Files\Git\usr\bin")])
+                .find(|d| d.join("sh.exe").is_file())
+        })
+        .as_ref()
+    }
+
+    /// The program to start, its arguments, and the PATH to give it (None: unchanged).
+    pub fn program(command: &str, program: PathBuf, args: &[String]) -> (PathBuf, Vec<String>, Option<OsString>) {
+        let usr = git_usr_bin();
+        let path = usr.and_then(|u| {
+            let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
+            if dirs.iter().any(|d| d == u) {
+                return None;
+            }
+            dirs.push(u.clone());
+            std::env::join_paths(dirs).ok()
+        });
+        if command.contains(['/', '\\']) || command == "hc" {
+            return (program, args.to_vec(), path);
+        }
+        let found = find(command);
+        if matches!(command, "python3" | "python") && found.as_ref().is_none_or(|p| p.to_string_lossy().contains("WindowsApps")) {
+            if let Some(py) = find("py") {
+                let mut a = vec!["-3".to_owned()];
+                a.extend(args.iter().cloned());
+                return (py, a, path);
+            }
+        }
+        if found.is_none() {
+            if let Some(exe) = usr.map(|u| u.join(format!("{command}.exe"))).filter(|p| p.is_file()) {
+                return (exe, args.to_vec(), path);
+            }
+        }
+        (program, args.to_vec(), path)
+    }
+}
+
 pub(crate) fn run_blocking(command: &str, args: &[String], cwd: Option<String>, limit: Duration) -> Result<(i32, String, String), String> {
     use std::io::Read;
     // The core may have no `hc` link beside it (a Windows zip has only herdr-core.exe).
     let program = if command == "hc" { crate::core_bin::path() } else { PathBuf::from(command) };
-    let mut child = crate::spawn::detached_command(program)
+    #[cfg(windows)]
+    let (program, args, path) = unix_tools::program(command, program, args);
+    #[cfg(windows)]
+    let args = &args[..];
+    let mut command_line = crate::spawn::detached_command(program);
+    #[cfg(windows)]
+    if let Some(path) = path {
+        command_line.env("PATH", path);
+    }
+    let mut child = command_line
         .args(args)
         .current_dir(cwd.map(PathBuf::from).unwrap_or_else(home))
         .stdin(Stdio::null())

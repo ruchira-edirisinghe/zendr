@@ -7345,6 +7345,7 @@ globalThis.__gpui = (() => {
           focus: () => __editor_focus(handle),
           blur: () => __editor_blur(handle),
           set_soft_wrap: (wrap) => __editor_set_soft_wrap(handle, Boolean(wrap)),
+          set_language: (language) => __editor_set_language(handle, String(language)),
           release: () => __editor_release(handle),
         };
       },

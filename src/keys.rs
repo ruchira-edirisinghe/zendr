@@ -5,7 +5,8 @@
 //!   "global":   { "ctrl-shift-t": "tab.new", "ctrl-1": "tab.select:1" },
 //!   "terminal": { "ctrl-left": "send:\u001bb", "ctrl-shift-t": "terminal" },
 //!   "layout:terminals": { "ctrl-]": "space.next" },
-//!   "mod:editor": { "ctrl-s": "editor.save" }
+//!   "mod:editor": { "ctrl-s": "editor.save" },
+//!   "input":      { "ctrl-f": "review-tabs.code-search" }
 //! }
 //! ```
 //!
@@ -121,11 +122,13 @@ fn tab(section: &str) -> Result<KeyBindingContextPredicate, String> {
     match section {
         "global" => Ok(Identifier("Herdr".into())),
         "terminal" => Ok(Identifier("Terminal".into())),
+        // Every text box and code editor; it beats the box's own keys (ctrl-f find and so on).
+        "input" => Ok(Identifier("Input".into())),
         s => match (s.strip_prefix("mod:"), s.strip_prefix("layout:")) {
             (Some(p), _) if !p.is_empty() => Ok(Equal("mod".into(), p.to_owned().into())),
             // While layouts/<name>.json is shown (the window's tab says which).
             (_, Some(l)) if !l.is_empty() => Ok(Equal("layout".into(), l.to_owned().into())),
-            _ => Err(format!("unknown section {s:?}: use \"global\", \"terminal\", \"layout:<name>\" or \"mod:<name>\"")),
+            _ => Err(format!("unknown section {s:?}: use \"global\", \"terminal\", \"input\", \"layout:<name>\" or \"mod:<name>\"")),
         },
     }
 }

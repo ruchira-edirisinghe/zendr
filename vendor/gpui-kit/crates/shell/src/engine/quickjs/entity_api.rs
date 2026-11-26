@@ -595,6 +595,21 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
         ),
     )?;
 
+    // HERDR: re-highlight a live editor as another language (a language picker).
+    let language_editor = runtime.clone();
+    globals.set(
+        "__editor_set_language",
+        Func::from(
+            move |ctx: Ctx<'_>, handle: EntityHandle, language: String| -> JsResult<()> {
+                let state = live_editor(&ctx, &language_editor, handle)?;
+                scope::with_current(|_, cx| {
+                    state.update(cx, |state, cx| state.set_highlighter(language, cx));
+                })
+                .ok_or_else(|| needs_call(&ctx, "set_language()"))
+            },
+        ),
+    )?;
+
     let read_editor = runtime.clone();
     globals.set(
         "__editor_value",
