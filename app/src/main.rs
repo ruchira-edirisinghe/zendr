@@ -26,6 +26,7 @@ mod mods;
 mod mod_files;
 mod process_cwd;
 mod programs;
+mod remote;
 mod remote_shell;
 mod settings;
 mod setup;
@@ -223,6 +224,7 @@ fn main() {
             let requests = mods::install_policy();
             if let Some(tx) = mods::request_sender() {
                 control::listen(tx);
+                remote::start_saved();
             }
             match core {
                 Ok(core) => open_main(core, requests, cx),

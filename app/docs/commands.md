@@ -151,7 +151,7 @@ Take a terminal's pane away and disable core keep; it keeps running (a sub-agent
 
 ## `terminal.right_click`
 
-Where right-clicks in a terminal (default: the focused one) go when its program takes the mouse: "program" or "menu" (Herdr's, the default). Shift+right-click is always the menu.
+Where right-clicks in a terminal (default: the focused one) go when its program takes the mouse: "program" or "menu" (Zendr's, the default). Shift+right-click is always the menu.
 
 | Argument | Required |
 |---|---|
@@ -160,7 +160,7 @@ Where right-clicks in a terminal (default: the focused one) go when its program 
 
 ## `terminal.pin`
 
-Pin an agent to the top of the agent lists (pinned true) or unpin it (false). Pins are kept with the terminal, so every Herdr client shows them, and end with it.
+Pin an agent to the top of the agent lists (pinned true) or unpin it (false). Pins are kept with the terminal, so every Zendr client shows them, and end with it.
 
 | Argument | Required |
 |---|---|
@@ -347,7 +347,7 @@ No arguments.
 
 ## `terminal.scroll`
 
-Scroll a terminal's view of its history (default: the focused one). Give exactly one of: lines (a whole number; negative goes up, toward history), pages (a number, fractions allowed; one page is the terminal's rows), to: "top" (oldest history) or "bottom" (the live screen). This scrolls Herdr's view, not the program.
+Scroll a terminal's view of its history (default: the focused one). Give exactly one of: lines (a whole number; negative goes up, toward history), pages (a number, fractions allowed; one page is the terminal's rows), to: "top" (oldest history) or "bottom" (the live screen). This scrolls Zendr's view, not the program.
 
 | Argument | Required |
 |---|---|
@@ -563,6 +563,28 @@ Toggle the command palette: every command by name, with its key; calling again c
 
 No arguments.
 
+## `remote.pair`
+
+Let the Zendr phone app reach this computer: turns the phone server on and returns the pairing link, its QR code (rows of 0/1) and the addresses. lan: answer the local network too, not only Tailscale. reset: a new token, which unpairs every phone.
+
+| Argument | Required |
+|---|---|
+| `lan` | no |
+| `reset` | no |
+| `port` | no |
+
+## `remote.stop`
+
+Turn the phone server off. Paired phones reconnect when it is on again.
+
+No arguments.
+
+## `remote.status`
+
+Whether the phone server is on, its port, and whether the local network may reach it.
+
+No arguments.
+
 ## `app.settings`
 
 Open the settings (section: look, alerts, updates).
@@ -573,7 +595,7 @@ Open the settings (section: look, alerts, updates).
 
 ## `app.check_updates`
 
-Look for a newer Herdr and herdr-core now.
+Look for a newer Zendr and herdr-core now.
 
 No arguments.
 
@@ -617,7 +639,7 @@ No arguments.
 
 ## `app.update`
 
-Restart into the update Herdr downloaded (your terminals keep running).
+Restart into the update Zendr downloaded (your terminals keep running).
 
 No arguments.
 
