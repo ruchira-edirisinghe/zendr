@@ -124,7 +124,7 @@ The internal names come from Herdr (`herdr-app`, `hc`), so Herdr setups and tool
 
 <img src="docs/screens/sessions.png" alt="The Sessions list" width="300" align="right">
 
-The left sidebar lists your **spaces** (one per project, with an avatar colour). Under each space are its **sessions**: each agent and each shell.
+The left sidebar lists your **spaces** (one per project, with an avatar colour). Under each space are its **sessions**: each agent and each shell. A tab split into several terminals lists each of them as its own session; the tabs along the top stay as they are.
 
 Every session tells you:
 - **what it is**: Claude Code's crab, Codex's mark, or a shell prompt

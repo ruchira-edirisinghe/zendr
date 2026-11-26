@@ -124,6 +124,28 @@ function sessionName(tab, l) {
   return /^\d+$/.test(name) ? prog || `Tab ${name}` : name;
 }
 
+// One terminal's own name, when its tab holds several: the pane's name, else its program's live
+// title, else the program, else "Terminal".
+function paneName(p) {
+  if (p?.name) return p.name;
+  const prog = p?.program?.name;
+  const live = clean(p?.title);
+  const path = /^[~/]|^[A-Za-z]:\\/.test((p?.title ?? "").replace(/^[^\p{L}\p{N}~/]+/u, ""));
+  if (live && live !== p?.terminal && live !== prog && !path && !live.includes("@")) return live;
+  return prog || "Terminal";
+}
+
+// Each tab's terminal panes, in the tab's order: the sessions the list shows.
+function terminalPanes(all) {
+  const byTab = new Map();
+  for (const p of all) {
+    if (!p.terminal) continue;
+    if (!byTab.has(p.tab)) byTab.set(p.tab, []);
+    byTab.get(p.tab).push(p);
+  }
+  return byTab;
+}
+
 // What an agent's screen says it's up to: a question it is asking, else its latest message, else its step.
 const BULLET = /^\s*[●⏺•◆]\s+(.*\S)/u;
 const STEP = /^[A-Z][\w.:-]*\(/;
@@ -224,12 +246,12 @@ export default class Spaces extends View {
 
   // One session under its space: icon, name, what it's doing, its state. Click goes there;
   // right-click colours it.
-  session(w, tab, lead, agent, t) {
+  session(w, tab, lead, agent, t, multi = false) {
     const address = lead?.terminal ?? null;
-    const status = agent?.status ?? tab.status ?? null;
-    const on = w.active && tab.active;
+    const status = agent?.status ?? (multi ? lead?.status : null) ?? tab.status ?? null;
+    const on = w.active && tab.active && (!multi || Boolean(lead?.focused));
     const tint = address ? sessionColor(address, w.id) : null;
-    const name = sessionName(tab, lead);
+    const name = multi ? paneName(lead) : sessionName(tab, lead);
     const summary = agent && feature("agent_summaries")
       ? (shared("agents.summaries") ?? {})[agent.address] ?? (shared("inbox.log") ?? []).find(e => e.terminal === agent.address && e.body)?.body ?? null
       : null;
@@ -240,7 +262,7 @@ export default class Spaces extends View {
     const at = tab.changed_at ?? tab.settled_at;
     const quiet = !on && (status === "idle" || !status);
     return h_flex()
-      .id(`session-${tab.id}`)
+      .id(`session-${multi ? lead.pane : tab.id}`)
       .pl(10).pr(10)
       .when(Boolean(summary), el => el.py(8)).when(!summary, el => el.h(34))
       .flex_none().gap(10).items_center().rounded(8).cursor_pointer()
@@ -251,6 +273,7 @@ export default class Spaces extends View {
       .on_click((_e, cx) => {
         cx.stop_propagation();
         if (agent) run("pane.focus", { pane: agent.pane });
+        else if (multi && lead?.pane) { run("space.select", { id: w.id }); run("tab.select", { id: tab.id }); run("pane.focus", { pane: lead.pane }); }
         else { run("space.select", { id: w.id }); run("tab.select", { id: tab.id }); }
       })
       .when(Boolean(address) && feature("session_colors"), el => el.on_mouse_down("right", (_e, cx) => {
@@ -266,7 +289,7 @@ export default class Spaces extends View {
   }
 
   // A space and, unless folded, its sessions.
-  block(r, t, leads, byPane) {
+  block(r, t, leads, byPane, byTab) {
     const head = this.row(r, t);
     if (!nesting()) return head;
     const tabs = r.w.tabs ?? [];
@@ -277,7 +300,14 @@ export default class Spaces extends View {
     return group
       .child(head)
       .child(v_flex().flex_none().ml(19).pl(9).gap(5).border_l(2).border_color(spaceFill(r.w, t) + "70")
-        .children(tabs.map(tab => { const lead = leads.get(tab.id); return this.session(r.w, tab, lead, lead?.terminal ? byPane.get(lead.terminal) : null, t); })));
+        // One row per running terminal: a tab split into several shows each of them, the top
+        // bar keeps its tabs.
+        .children(tabs.flatMap(tab => {
+          const own = byTab.get(tab.id) ?? [];
+          if (own.length > 1) return own.map(p => this.session(r.w, tab, p, byPane.get(p.terminal) ?? null, t, true));
+          const lead = leads.get(tab.id);
+          return [this.session(r.w, tab, lead, lead?.terminal ? byPane.get(lead.terminal) : null, t)];
+        })));
   }
 
   // Ports: each local terminal's process (hc get), then one PowerShell look at every
@@ -591,9 +621,11 @@ export default class Spaces extends View {
   // The rows, under a header per machine once one isn't this computer.
   grouped(t, collapsed) {
     const rows = this.ordered();
-    const leads = leadPanes(panes());
+    const all = panes();
+    const leads = leadPanes(all);
+    const byTab = terminalPanes(all);
     const byPane = new Map(agents().map(a => [a.address, a]));
-    const draw = (r) => (collapsed ? this.compact(r, t) : this.block(r, t, leads, byPane));
+    const draw = (r) => (collapsed ? this.compact(r, t) : this.block(r, t, leads, byPane, byTab));
     // Where the active space's row lands among the children this returns: the list scrolls by its direct
     // children, and machine headers, login notes and loading rows count too.
     this.activeAt = -1;
@@ -773,7 +805,7 @@ export default class Spaces extends View {
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
           .when(nest && (folded || feature("session_counts")), el => el.child(div().flex_none().min_w(18).h(18).px(5).rounded(9).flex().items_center().justify_center()
             .bg(folded && top ? t[top] + "26" : t.raised).text_size(10.5).font_semibold().text_color(folded && top ? t[top] : t.muted)
-            .tooltip(`${w.tabs.length} session${w.tabs.length === 1 ? "" : "s"}`).child(`${w.tabs.length}`)))
+            .tooltip(`${this.sessionCount([w])} session${this.sessionCount([w]) === 1 ? "" : "s"}`).child(`${this.sessionCount([w])}`)))
           .when(nest, el => el.child(chevron)),
       )
       .when(Boolean(meta), el => el.child(meta.pl(tree ? 44 : 30)));
@@ -793,6 +825,12 @@ export default class Spaces extends View {
       .on_click(() => run("space.select", { id: w.id }))
       .child(div().text_color(w.active ? t.foreground : t.muted).child(String(i + 1)))
       .child(div().absolute().right(5).text_color(tone(t, w.status)).child(glyph(w.status))));
+  }
+
+  // Sessions in the header's count: running terminals (a split tab counts each), else tabs.
+  sessionCount(sp) {
+    const byTab = terminalPanes(panes());
+    return sp.reduce((n, w) => n + (w.tabs ?? []).reduce((m, tab) => m + Math.max(1, (byTab.get(tab.id) ?? []).length), 0), 0);
   }
 
   render() {
@@ -824,7 +862,7 @@ export default class Spaces extends View {
         .when(!collapsed, el => el.child(h_flex().gap(7).items_center()
           .child(div().text_size(12).font_semibold().text_color(t.muted).child(nesting() ? "Sessions" : "Spaces"))
           .when(feature("session_counts"), el => el.child(div().h(17).px(6).rounded(9).flex().items_center().bg(t.raised).text_size(10.5).text_color(t.dim)
-            .child(String(nesting() ? sp.reduce((n, w) => n + (w.tabs ?? []).length, 0) : sp.length))))))
+            .child(String(nesting() ? this.sessionCount(sp) : sp.length))))))
         .child(div().id("space-new").tooltip("New space").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
       .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 10).pt(collapsed ? 0 : 2).pb(14).overflow_y_scrollbar().mode("always").track_scroll(this.scroll)
