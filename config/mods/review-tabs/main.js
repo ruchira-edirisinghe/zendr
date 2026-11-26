@@ -372,6 +372,7 @@ export default class Tabs extends View {
       .child(button("tab-new", svg("mods/workspace-chrome/plus.svg").size(14), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), "New tab or terminal (Ctrl+Shift+T)"))
       .child(button("split-right", svg("mods/review-file/icons/split.svg").size(14), () => run("pane.split", { direction: "right" }), "New terminal to the right (Ctrl+Shift+O)"))
       .child(button("split-down", svg("mods/review-file/icons/split-down.svg").size(14), () => run("pane.split", { direction: "down" }), "New terminal below (Ctrl+Shift+E)"))
+      .child(button("arrange", svg("mods/review-file/icons/arrange.svg").size(14), () => run("layout.arrange"), "Arrange blocks: drag panels to new places (Esc when done)"))
       // The toolbar: every panel is a labelled toggle, lit while it's showing.
       .child(div().w(1).h(18).mx(5).flex_none().bg(t.border))
       .when(feature("command_search") || feature("ai_command"), el => el.child(toggle("commands", "mods/commands/workflow.svg", "Commands", false,

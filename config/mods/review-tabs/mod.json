@@ -4,5 +4,12 @@
   "cloned_from": {
     "name": "tabs",
     "version": "0.1.18"
-  }
+  },
+  "palette": [
+    {
+      "title": "Arrange blocks: drag panels to new places",
+      "command": "layout.arrange",
+      "words": "arrange layout move dock drag drop rearrange panels blocks place below beside"
+    }
+  ]
 }
