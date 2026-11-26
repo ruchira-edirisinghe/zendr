@@ -140,10 +140,12 @@ Spaces also say what they're up to: the **ports** their programs listen on (`:51
 ### The toolbar: one row of labelled buttons
 
 ```text
- [ Hello world ✕ ] [ api ✕ ]  +  │  </> Commands   ▯ Explorer   ▤ Code   👥 Hub   🔔 Notifications ③  │  ─ ▢ ✕
+ [ Hello world ✕ ] [ api ✕ ]  + ◫ ⊟ ⇄  │  </> Commands   ▯ Explorer   ▤ Code   ⑂ Graph   👥 Hub   🔔 Notifications ③  │  ─ ▢ ✕
 ```
 
 No mystery icons. Each button says what it opens and **lights up while its panel is showing**. A space starts with just the terminal, and you open the rest when you want them. Each space remembers what it had open.
+
+Beside **+** are **new terminal to the right**, **new terminal below** and **Arrange blocks**. On a narrow window the labels fold away and the buttons keep their icons and tooltips.
 
 ### The notifications drawer: what needs you comes first
 
@@ -184,17 +186,58 @@ flowchart LR
     a1 & a2 & coord -. "status, summaries" .-> hub
 ```
 
-### A code reviewer beside your agent
+### A code editor beside your agent
 
-<p align="center"><img src="docs/screens/code.png" alt="The explorer, the code reviewer and the terminal side by side" width="100%"></p>
+<p align="center"><img src="docs/screens/code.png" alt="The explorer, the code editor and the terminal side by side" width="100%"></p>
 
-Click **Explorer** and **Code** in the toolbar, and the space becomes a small IDE built for reviewing an agent's work:
+Click **Explorer** and **Code** in the toolbar, and the space becomes a small IDE built for working alongside an agent:
 
-- a **VS Code-style explorer** with the repo's changed files on top and the full tree below
-- each file **whole, with changes inline**: one column of line numbers, removed lines in red, syntax highlighting, and a ruler beside the scrollbar
-- <kbd>N</kbd> / <kbd>P</kbd> (or <kbd>F7</kbd>) to jump between changes; **Changes only** folds the rest away
+- a **VS Code-style explorer** with the repo's changed files on top and the full tree below, each file with a **Seti-style icon** for its type
+- **tabs**: a single click previews a file, a double click (or an edit) keeps it open
+- **Review** mode shows each file whole with its changes inline: removed lines in red, a ruler beside the scrollbar, <kbd>N</kbd> / <kbd>P</kbd> (or <kbd>F7</kbd>) to jump between changes and **Changes only** to fold the rest away
+- **Edit** mode is a real editor: <kbd>Ctrl</kbd> <kbd>S</kbd> saves (line endings kept), and if the agent changes the file meanwhile you choose whose version wins
+- **language detection** from the file name, a shebang (`#!/usr/bin/env python3`), a modeline or the content itself; click the language in the status bar to change it
+- <kbd>Ctrl</kbd> + **mouse wheel** zooms the code in and out, to see more lines or fewer
+- **Split editor** opens a second code view beside the first, and the toolbar's split buttons open more terminals. Open as many as you like.
 - **VS Code** opens the file at the line you're reading
-- it follows saves as the agent writes
+
+| Keys in the editor | Does |
+| --- | --- |
+| <kbd>Ctrl</kbd> <kbd>P</kbd> | Quick open a file (`:42` goes to a line, `>` runs an editor command) |
+| <kbd>Ctrl</kbd> <kbd>G</kbd> | Go to line |
+| <kbd>Ctrl</kbd> <kbd>F</kbd> / <kbd>Ctrl</kbd> <kbd>H</kbd> | Find / replace |
+| <kbd>Ctrl</kbd> <kbd>/</kbd> | Comment or uncomment the lines |
+| <kbd>Ctrl</kbd> <kbd>]</kbd> / <kbd>[</kbd> | Indent / outdent |
+| <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>↑</kbd> / <kbd>↓</kbd> | Add a cursor above / below |
+| <kbd>Alt</kbd> <kbd>Z</kbd> | Word wrap |
+| <kbd>Ctrl</kbd> <kbd>E</kbd> | Switch between Review and Edit |
+| <kbd>Ctrl</kbd> <kbd>\</kbd> | Split the editor |
+| <kbd>Ctrl</kbd> <kbd>W</kbd> | Close the tab |
+| <kbd>F1</kbd> | Every editor shortcut |
+
+### The source control graph
+
+Click **Graph** in the toolbar for the repo's history in the right drawer: each commit on its **branch line**, with merges and forks drawn between them, and **branch and tag pills**. Uncommitted changes sit at the top. Click a commit to see its files, and click a file to open **that commit's change** in the code view. **All branches** shows the other branches too, and the graph refreshes itself when you commit.
+
+### VS Code extensions
+
+Already set up VS Code just the way you like it? Open **VS Code extensions** from the command palette (or the puzzle button in the code view's tabs). Zendr reads the extensions you have installed, built-in ones included, and lets you use:
+
+- their **colour themes**, for the whole app (light or dark), with the theme's own **code colours** in the editor
+- their **languages**, so files they know get detected and named in Zendr too
+
+Zendr runs no extension code. It only reads the themes and language lists the extensions describe.
+
+### Arrange the blocks
+
+Want the drawer below the terminals instead of beside them? Click **Arrange blocks** in the toolbar (or run it from the command palette). Every block in the work area turns into a card:
+
+- drag a card onto **another block's edge** to put it on that side: drop it on the bottom edge and it sits **below**
+- drop it in the **middle** of a block to **swap** the two
+- a highlight shows where it will land before you let go
+- <kbd>Esc</kbd> or **Done** when you're finished
+
+The new arrangement is saved to your layout and comes back next time.
 
 ### Colours, so you can tell sessions apart
 
@@ -221,7 +264,16 @@ Right-click a session, a tab or a hub card, or press <kbd>Ctrl</kbd> <kbd>Shift<
 
 <p align="center"><img src="docs/screens/features.png" alt="Settings: Features" width="80%"></p>
 
-**Settings → Features** has a switch for every extra: the hub, the Notifications button, space details, agent summaries, session colours, the separate Agents list, shortcut hints, pane buttons and each Warp-style tool. **Keep it simple** turns all the extras off at once, and **Turn all on** brings them back.
+**Settings → Features** has a switch for every extra, so Zendr can be as busy or as quiet as you like:
+
+- **panels and toolbar**: the hub, the Notifications button, the source control graph, the explorer and code view, the new-terminal buttons and Arrange blocks
+- **sidebar**: space details, agent summaries, session colours, session counts and the separate Agents list
+- **code view**: editing (off makes it read-only), file-type icons, language detection, Ctrl + wheel zoom, VS Code extensions, shortcut hints and pane buttons
+- **Warp-style tools**: each one on its own
+
+**Keep it simple** turns all the extras off at once, and **Turn all on** brings them back.
+
+**Settings → Claude mods** looks after the three [claude-mods](https://github.com/iddhi-sulakshana/claude-mods) plugins for Claude Code: **Next steps** (suggested next prompts as buttons), the **Session bridge** (sessions message each other; the hub uses it) and the **Model router** (each turn gets a matching reasoning effort). Turn each one on or off (Zendr installs it the first time), and open **Options** to change its settings. New Claude Code sessions pick up the changes.
 
 **Settings → Notifications** sets, for each kind of notification, whether it pops up, plays a sound and goes to the drawer. It also covers do not disturb, how long pop-ups stay, the badge (number, dot or nothing), how many notifications to keep, and whether rings and sidebar lines show.
 
@@ -244,6 +296,7 @@ Right-click a session, a tab or a hub card, or press <kbd>Ctrl</kbd> <kbd>Shift<
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>P</kbd> | Command palette: every command, by name |
 | <kbd>Ctrl</kbd> <kbd>,</kbd> | Settings |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd> | Show or hide the sidebar |
+| <kbd>Ctrl</kbd> <kbd>=</kbd> / <kbd>-</kbd> / <kbd>0</kbd> | Zoom the whole app in / out / back |
 
 Change any of them in `%USERPROFILE%\.config\herdr-app\keys.json`.
 
