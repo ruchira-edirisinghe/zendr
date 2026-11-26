@@ -131,7 +131,7 @@ Every session tells you:
 - **what it's doing**: its current task, and a one-line summary read from its screen (*"Running the tests…"*, *"Do you want to apply this edit?"*)
 - **whether it needs you**: <kbd>Needs you</kbd> in red, a spinning **Working**, a green **Done**, or how long it's been quiet
 
-Click a session to jump into it. Right-click to give it a colour. Fold a busy space with its arrow; a folded space still shows how many sessions it has, coloured by the most urgent.
+Click a session to jump into it. Drag it into the work area to put it **side by side** with the pane you're in, or **below** it, even from another tab. Right-click to give it a colour. Fold a busy space with its arrow; a folded space still shows how many sessions it has, coloured by the most urgent.
 
 Spaces also say what they're up to: the **ports** their programs listen on (`:5173 :8080`), their branch's **pull request** (`PR #42`), their **session-bridge** status, and their latest unread notification.
 

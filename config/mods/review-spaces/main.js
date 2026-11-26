@@ -11,7 +11,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { spaces, machines, panes, terminals, agents, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, machines, panes, terminals, agents, run, openOverlay, closeOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -263,15 +263,21 @@ export default class Spaces extends View {
     const quiet = !on && (status === "idle" || !status);
     return h_flex()
       .id(`session-${multi ? lead.pane : tab.id}`)
+      .when(this.drag?.started && this.drag.terminal === address, el => el.opacity(0.5))
       .pl(10).pr(10)
       .when(Boolean(summary), el => el.py(8)).when(!summary, el => el.h(34))
       .flex_none().gap(10).items_center().rounded(8).cursor_pointer()
       .when(!tint, el => el.when(on, el => el.bg(t.selected)).hover(s => s.bg(t.hover)))
       .when(Boolean(tint), el => el.border_1().bg(tint + (on ? "42" : "14")).border_color(on ? tint + "cc" : "#00000000")
         .hover(s => s.bg(tint + (on ? "4d" : "2e"))))
-      .tooltip(`${name}${status === "blocked" ? " needs you" : ""}. Click to go there${address && feature("session_colors") ? ", right-click to colour it" : ""}.`)
+      .tooltip(`${name}${status === "blocked" ? " needs you" : ""}. Click to go there${address ? ", drag it into the work area to put it beside the one you're in" : ""}${address && feature("session_colors") ? ", right-click to colour it" : ""}.`)
+      // Pressed: a drag may start (see the list's mouse move); a click goes there.
+      .when(Boolean(address), el => el.on_mouse_down("left", (e) => {
+        this.drag = { terminal: address, pane: lead?.pane ?? null, tab: tab.id, name, x: e.position.x, y: e.position.y, started: false };
+      }))
       .on_click((_e, cx) => {
         cx.stop_propagation();
+        if (this.dragEnded) { this.dragEnded = false; return; }
         if (agent) run("pane.focus", { pane: agent.pane });
         else if (multi && lead?.pane) { run("space.select", { id: w.id }); run("tab.select", { id: tab.id }); run("pane.focus", { pane: lead.pane }); }
         else { run("space.select", { id: w.id }); run("tab.select", { id: tab.id }); }
@@ -833,7 +839,33 @@ export default class Spaces extends View {
     return sp.reduce((n, w) => n + (w.tabs ?? []).reduce((m, tab) => m + Math.max(1, (byTab.get(tab.id) ?? []).length), 0), 0);
   }
 
+  // A pressed session that moves far enough becomes a drag: the drop zones open over the window.
+  dragMove(e, cx) {
+    const d = this.drag;
+    if (!d) return;
+    // A move with the button up: the press ended somewhere this never heard of.
+    if (e.pressed_button !== "left") { this.drag = null; return; }
+    if (d.started || Math.hypot(e.position.x - d.x, e.position.y - d.y) < 8) return;
+    d.started = true;
+    setShared("session.drag", { terminal: d.terminal, pane: d.pane, tab: d.tab, name: d.name, at: Date.now() });
+    d.overlay = openOverlay({ mod: "session-drop", kind: "window", frame: "none", at: { x: 0, y: 0 }, width: 1, height: 1, props: { terminal: d.terminal, name: d.name } });
+    cx.notify();
+  }
+
+  // The button came up over the list: a drag ends here without a drop.
+  endDrag(cx) {
+    const d = this.drag;
+    this.drag = null;
+    if (!d?.started) return;
+    this.dragEnded = true;
+    if (shared("session.drag")?.terminal === d.terminal) setShared("session.drag", null);
+    if (d.overlay) closeOverlay(d.overlay);
+    cx.notify();
+  }
+
   render() {
+    // The drop zones ended the drag (a drop, or let go outside them): stop showing the row as lifted.
+    if (this.drag?.started && !shared("session.drag")) this.drag = null;
     const t = theme();
     const collapsed = narrow();
     const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
@@ -868,7 +900,8 @@ export default class Spaces extends View {
       .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 10).pt(collapsed ? 0 : 2).pb(14).overflow_y_scrollbar().mode("always").track_scroll(this.scroll)
         // A block above (another mod's) growing, or the window resizing, shrinks this list and can push the active space out.
         .on_size_change((_size, cx) => { if (this.activeAt >= 0) { this.scroll.scroll_to_item(this.activeAt); cx.notify(); } })
-        .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
+        .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.endDrag(cx); cx.notify(); })
+        .on_mouse_move((e, cx) => this.dragMove(e, cx))
         .children(list));
   }
 }
