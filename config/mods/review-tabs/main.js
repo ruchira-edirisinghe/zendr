@@ -100,6 +100,7 @@ export default class Tabs extends View {
         const command = await nextCommand();
         if (command === "inbox") openInbox();
         else if (command === "hub") { if (feature("hub")) toggleSide("hub"); }
+        else if (command === "graph") { if (feature("graph")) toggleSide("graph"); }
         else if (command === "jump-unread") jumpUnread();
         else if (command === "color") pickFocusedColor();
         else if (command === "command-search") openCommands("history");
@@ -349,10 +350,11 @@ export default class Tabs extends View {
     const side = find(root, "side");
     const sideOn = (child) => Boolean(side && !side.hidden && side.active === child);
     const viewOn = (id) => { const n = find(root, id); return Boolean(n && !n.hidden); };
+    const compact = (this.barWidth ?? 2000) < 1360;
     const toggle = (id, icon, label, on, tip, action, extra) => h_flex().id(`tb-${id}`).h(28).px(9).gap(6).flex_none().items_center().rounded(7)
       .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted).border_1().border_color(on ? t.border : t.chrome)
       .hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip(tip).on_mouse_down("left", stop)
-      .on_click(() => action()).child(svg(icon).size(14)).child(label).when(Boolean(extra), el => el.child(extra));
+      .on_click(() => action()).child(svg(icon).size(14)).when(!compact, el => el.child(label)).when(Boolean(extra), el => el.child(extra));
     const panelButton = (id, label, icon) => {
       const on = Boolean(panel && !panel.hidden && body?.active === id);
       return toggle(`panel-${id}`, icon, label, on, `Show or hide the ${label} panel`, () => {
@@ -361,12 +363,15 @@ export default class Tabs extends View {
       });
     };
     return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome).border_b(1).border_color(t.border)
+      .on_size_change((size, cx) => { const w = size.width / (settings().zoom || 1); if (Math.abs(w - (this.barWidth ?? 0)) > 1) { this.barWidth = w; cx.notify(); } })
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel(e => this.wheel(e))
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().track_scroll(this.scroll)
         .on_size_change((_size, cx) => { if (active >= 0) { this.scroll.scroll_to_item(active); cx.notify(); } })
         .children(shown.map(item)))
-      .child(button("tab-new", svg("mods/workspace-chrome/plus.svg").size(14), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), "New tab or terminal"))
+      .child(button("tab-new", svg("mods/workspace-chrome/plus.svg").size(14), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }), "New tab or terminal (Ctrl+Shift+T)"))
+      .child(button("split-right", svg("mods/review-file/icons/split.svg").size(14), () => run("pane.split", { direction: "right" }), "New terminal to the right (Ctrl+Shift+O)"))
+      .child(button("split-down", svg("mods/review-file/icons/split-down.svg").size(14), () => run("pane.split", { direction: "down" }), "New terminal below (Ctrl+Shift+E)"))
       // The toolbar: every panel is a labelled toggle, lit while it's showing.
       .child(div().w(1).h(18).mx(5).flex_none().bg(t.border))
       .when(feature("command_search") || feature("ai_command"), el => el.child(toggle("commands", "mods/commands/workflow.svg", "Commands", false,
@@ -376,6 +381,8 @@ export default class Tabs extends View {
       .when(Boolean(find(root, "code")), el => el.child(toggle("code", "mods/workspace-chrome/file-text.svg", "Code", viewOn("code"),
         "Show or hide the code reviewer", () => run("layout.toggle", { id: "code" }))))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
+      .when(feature("graph") && Boolean(find(root, "graph")), el => el.child(toggle("graph", "mods/review-file/icons/graph.svg", "Graph", sideOn("graph"),
+        "Source control graph: commits and branches", () => toggleSide("graph"))))
       .when(feature("hub") && Boolean(find(root, "side")), el => el.child(toggle("hub", "mods/hub/users.svg", "Hub", sideOn("hub"),
         "The coordinator, every agent and their messages", () => toggleSide("hub"))))
       .when(feature("bell"), el => el.child(toggle("bell", "mods/review-tabs/bell.svg", "Notifications", sideOn("notifications"),
