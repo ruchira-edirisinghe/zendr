@@ -24,6 +24,8 @@ android {
         versionCode = 200
         versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Each on-device test starts the app fresh, in its own process with its data cleared.
+        testInstrumentationRunnerArguments["clearPackageData"] = "true"
     }
 
     signingConfigs {
@@ -51,6 +53,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    testOptions { execution = "ANDROIDX_TEST_ORCHESTRATOR" }
 }
 
 dependencies {
@@ -80,4 +83,5 @@ dependencies {
     androidTestImplementation("androidx.test:rules:1.6.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    androidTestUtil("androidx.test:orchestrator:1.5.1")
 }
