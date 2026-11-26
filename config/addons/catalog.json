@@ -1,0 +1,858 @@
+{
+ "version": 1,
+ "addons": [
+  {
+   "id": "usage-limits",
+   "title": "Usage limits",
+   "kind": "claude",
+   "group": "Limits and cost",
+   "about": "Your Claude Code and Codex subscription limits in the Herdr status bar, always in view: every limit window each one reports (5-hour, weekly, per-model weekly such as Fable), with a bar, a pace tick, the percent used and, when it gets tight, the time to reset. Hover it for the details and to choose which providers and windows show.",
+   "author": "nozikov",
+   "license": "MIT",
+   "repo": "https://github.com/nozikov/herdr-usage-limits/tree/main/",
+   "gallery": "https://herdr.dev/mods/nozikov/herdr-usage-limits/",
+   "mods": [
+    "usage-limits"
+   ],
+   "show": "status",
+   "size": 380,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "claude-usage",
+   "title": "Claude usage",
+   "kind": "claude",
+   "group": "Limits and cost",
+   "about": "How much of your Claude limits your agents are using, and when they'll run out. A popup shows the account's 5-hour and weekly use as colored bars with their reset times and a forecast (\"At this pace, runs out at 5:24 pm\"), today's estimated cost across every Claude Code session on the computer next to a 7-day bar chart, and each Claude Code agent in Herdr with its session's tokens and cost.",
+   "author": "cunderw",
+   "license": "MIT",
+   "repo": "https://github.com/cunderw/herdr-claude-usage/tree/main/",
+   "gallery": "https://herdr.dev/mods/cunderw/herdr-claude-usage/",
+   "mods": [
+    "claude-usage"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "insights",
+   "title": "Insights",
+   "kind": "claude",
+   "group": "Limits and cost",
+   "about": "A native Herdr dashboard for token usage across Pi, Codex, Claude Code, OpenCode, and Antigravity. It reads existing local session data, shows model rankings and activity, and opens in its own tab from an Insights button beside the native tabs.",
+   "author": "GaganSD",
+   "license": "MIT",
+   "repo": "https://github.com/GaganSD/coding-agent-toolkit/tree/main/herdr-insights",
+   "gallery": "https://herdr.dev/mods/GaganSD/coding-agent-toolkit--herdr-insights/",
+   "mods": [
+    "insights"
+   ],
+   "show": "tab",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "skill-ledger",
+   "title": "Skill Ledger",
+   "kind": "claude",
+   "group": "Limits and cost",
+   "about": "A side panel that shows which skills and MCP servers a person really uses, counted from the local logs of Claude Code and Pi. Two tabs (Skills, MCP) and a period picker sit above ranked lists that fold open and shut.",
+   "author": "felixfisher",
+   "license": "MIT",
+   "repo": "https://github.com/felixfisher/herdr-skill-ledger/tree/main/",
+   "gallery": "https://herdr.dev/mods/felixfisher/herdr-skill-ledger/",
+   "mods": [
+    "skill-ledger"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": "Node.js",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "wrapped",
+   "title": "Wrapped",
+   "kind": "claude",
+   "group": "Limits and cost",
+   "about": "An overlay that shows a person their Claude Code stats as a card to share. One big token number, what it would have cost, how they worked, the most agents they had going at once, how long their agents waited for them, a swear jar, and a dry line picked by their own numbers.",
+   "author": "adamentwistle",
+   "license": "MIT",
+   "repo": "https://github.com/adamentwistle/herdr-wrapped/tree/main/",
+   "gallery": "https://herdr.dev/mods/adamentwistle/herdr-wrapped/",
+   "mods": [
+    "wrapped"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": "Python 3",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "sessions",
+   "title": "Agent sessions",
+   "kind": "claude",
+   "group": "Never lose a conversation",
+   "about": "A popup that finds any past Claude Code or Codex session, across every project, by its title, folder or what was said in it. It previews the selected session's last exchanges and brings it back in a new tab in its own folder, forks it into a new session, or goes to it when it is still running in a Herdr terminal.",
+   "author": "cunderw",
+   "license": "MIT",
+   "repo": "https://github.com/cunderw/herdr-sessions/tree/main/",
+   "gallery": "https://herdr.dev/mods/cunderw/herdr-sessions/",
+   "mods": [
+    "sessions"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "revive",
+   "title": "Revive",
+   "kind": "claude",
+   "group": "Never lose a conversation",
+   "about": "Revive brings back the coding agent a Herdr terminal lost to a reboot or a herdr-core restart, in the same pane, with the same session and flags. It also forks the focused agent's conversation into a new session beside it.",
+   "author": "dmazlum",
+   "license": "MIT",
+   "repo": "https://github.com/dmazlum/herdr-revive/tree/main/",
+   "gallery": "https://herdr.dev/mods/dmazlum/herdr-revive/",
+   "mods": [
+    "revive"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": "Node.js",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "reopen-tab",
+   "title": "Reopen closed tab",
+   "kind": "claude",
+   "group": "Never lose a conversation",
+   "about": "Cmd+Shift+T for the Herdr desktop app, like a browser's: it brings back the tab you closed last, where it was in its space, with its name and its panes in their folders, and agents (Claude Code, Codex) pick up their last conversation there. Press again for the close before that.",
+   "author": "mustafaTokmak",
+   "license": "MIT",
+   "repo": "https://github.com/mustafaTokmak/herdr-reopen-tab/tree/main/",
+   "gallery": "https://herdr.dev/mods/mustafaTokmak/herdr-reopen-tab/",
+   "mods": [
+    "reopen-tab"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "claude-tab-name",
+   "title": "Claude tab name",
+   "kind": "claude",
+   "group": "See what every agent is doing",
+   "about": "A tab and its Claude Code session keep the same name: /rename in Claude renames the tab, and F2 renames both.",
+   "author": "iml885203",
+   "license": "MIT",
+   "repo": "https://github.com/iml885203/herdr-mods/tree/main/claude-tab-name",
+   "gallery": "https://herdr.dev/mods/iml885203/herdr-mods--claude-tab-name/",
+   "mods": [
+    "claude-tab-name"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "recap",
+   "title": "Recap",
+   "kind": "claude",
+   "group": "See what every agent is doing",
+   "about": "Come back to a dozen agents and know in seconds which ones need you. Recap lists every agent on every machine Herdr is connected to, grouped by whose move it is, each with a one-line recap of where it got to, written in the background while you were away.",
+   "author": "mrolafsson",
+   "license": "MIT",
+   "repo": "https://github.com/mrolafsson/herdr-recap/tree/main/app",
+   "gallery": "https://herdr.dev/mods/mrolafsson/herdr-recap--app/",
+   "mods": [
+    "recap"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "over9k-switcher",
+   "title": "Over9k Switcher",
+   "kind": "claude",
+   "group": "See what every agent is doing",
+   "about": "Jump between agents the way you switch apps. Ctrl+Tab lists every agent on every space and computer, most recent first, with its status.",
+   "author": "herunan",
+   "license": "MIT",
+   "repo": "https://github.com/herunan/herdr-over9k/tree/main/over9k-switcher",
+   "gallery": "https://herdr.dev/mods/herunan/herdr-over9k--over9k-switcher/",
+   "mods": [
+    "over9k-switcher"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "over9k-prompts",
+   "title": "Over9k Timeline",
+   "kind": "claude",
+   "group": "Read and steer conversations",
+   "about": "See exactly what happened, prompt by prompt. The Timeline lists the conversation you're in, newest first: how long the agent worked on each prompt, when it finished, the tokens it wrote, the files it changed and the commands it ran.",
+   "author": "herunan",
+   "license": "MIT",
+   "repo": "https://github.com/herunan/herdr-over9k/tree/main/over9k-timeline",
+   "gallery": "https://herdr.dev/mods/herunan/herdr-over9k--over9k-timeline/",
+   "mods": [
+    "over9k-prompts"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": "Python 3",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "prompt-history",
+   "title": "Prompt History",
+   "kind": "claude",
+   "group": "Read and steer conversations",
+   "about": "A panel that shows every prompt you gave a Claude Code agent in its current session, and what it answered, as a column of cards. The newest card sits at the bottom and the list follows it like a terminal.",
+   "author": "ReyArlena",
+   "license": "MIT",
+   "repo": "https://github.com/ReyArlena/herdr-mods/tree/main/prompt-history",
+   "gallery": "https://herdr.dev/mods/ReyArlena/herdr-mods--prompt-history/",
+   "mods": [
+    "prompt-history"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "prompt-jump",
+   "title": "Prompt Jump",
+   "kind": "claude",
+   "group": "Read and steer conversations",
+   "about": "A panel beside the terminals that lists, oldest first, the prompts the person typed into the focused Claude Code, Codex or omp session. Clicking one scrolls that agent's terminal so the prompt is in view.",
+   "author": "doominkim",
+   "license": "MIT",
+   "repo": "https://github.com/doominkim/herdr-prompt-jump/tree/main/",
+   "gallery": "https://herdr.dev/mods/doominkim/herdr-prompt-jump/",
+   "mods": [
+    "prompt-jump"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": "Node.js",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "redpen",
+   "title": "Redpen",
+   "kind": "claude",
+   "group": "Read and steer conversations",
+   "about": "Comment on Claude Code's latest reply, block by block, and send all the comments back as one message. Press a key and the reply opens in a pane beside Claude, split into paragraphs, list items, code blocks and tables.",
+   "author": "imutaroh",
+   "license": "MIT",
+   "repo": "https://github.com/imutaroh/herdr-redpen/tree/main/",
+   "gallery": "https://herdr.dev/mods/imutaroh/herdr-redpen/",
+   "mods": [
+    "redpen"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": "Python 3",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "fleece",
+   "title": "Fleece",
+   "kind": "claude",
+   "group": "Read and steer conversations",
+   "about": "Fleece pulls things out of a Claude Code or Codex agent's answers. A dock pane next to the agent lists the files it edited, plus the code, commands, paths and links from its last few turns.",
+   "author": "dmazlum",
+   "license": "MIT",
+   "repo": "https://github.com/dmazlum/herdr-fleece/tree/main/app",
+   "gallery": "https://herdr.dev/mods/dmazlum/herdr-fleece--app/",
+   "mods": [
+    "fleece",
+    "fleece-dock"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": "Node.js",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "claude-goal",
+   "title": "Claude goal",
+   "kind": "claude",
+   "group": "Read and steer conversations",
+   "about": "Write the next /goal for the Claude Code session you're in, with one key.",
+   "author": "iml885203",
+   "license": "MIT",
+   "repo": "https://github.com/iml885203/herdr-mods/tree/main/claude-goal",
+   "gallery": "https://herdr.dev/mods/iml885203/herdr-mods--claude-goal/",
+   "mods": [
+    "claude-goal"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "agent-review",
+   "title": "Agent review",
+   "kind": "claude",
+   "group": "Review what Claude changed",
+   "about": "A window that shows what an agent (Claude Code, Codex, any agent running in a Herdr terminal) changed in its repo since you last looked. On the left is a list of the agents in the space; on the right, the picked agent's diff.",
+   "author": "jkuepker",
+   "license": "MIT",
+   "repo": "https://github.com/jkuepker/herdr-mods/tree/main/agent-review",
+   "gallery": "https://herdr.dev/mods/jkuepker/herdr-mods--agent-review/",
+   "mods": [
+    "agent-review"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "walkthrough",
+   "title": "Walkthrough",
+   "kind": "claude",
+   "group": "Review what Claude changed",
+   "about": "A dialog (or pane) that turns the diff of the focused terminal's repository into a guided reading: Claude groups related hunks into steps, orders them so each builds on the last, and explains what each step changes, with the step's code under the explanation. A contents column lists the steps; everything no step covers is listed at the end.",
+   "author": "dmazlum",
+   "license": "MIT",
+   "repo": "https://github.com/dmazlum/herdr-walkthrough/tree/main/",
+   "gallery": "https://herdr.dev/mods/dmazlum/herdr-walkthrough/",
+   "mods": [
+    "walkthrough"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": "GitHub CLI (gh)",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "tourist",
+   "title": "Tourist",
+   "kind": "claude",
+   "group": "Review what Claude changed",
+   "about": "A pane where Claude or Codex gives you a guided tour of code: your branch's changes, the last commit, the whole repo, or a feature you describe. The agent picks the stops and their order.",
+   "author": "CodeyPacker",
+   "license": "MIT",
+   "repo": "https://github.com/CodeyPacker/herdr-mods/tree/main/tourist",
+   "gallery": "https://herdr.dev/mods/CodeyPacker/herdr-mods--tourist/",
+   "mods": [
+    "tourist"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": "Node.js",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "session-changes",
+   "title": "Session changes",
+   "kind": "claude",
+   "group": "Review what Claude changed",
+   "about": "See what a Claude Code session changed across its repos, from a summary down to the diff.",
+   "author": "iml885203",
+   "license": "MIT",
+   "repo": "https://github.com/iml885203/herdr-mods/tree/main/session-changes",
+   "gallery": "https://herdr.dev/mods/iml885203/herdr-mods--session-changes/",
+   "mods": [
+    "session-changes"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "arena",
+   "title": "Arena",
+   "kind": "claude",
+   "group": "Automate and plan",
+   "about": "Arena hands one task to several coding agents at once, each in its own git worktree, then lays their results out as cards: status, latest answer, +ins −del · N files and time. You keep the best lane, or fuse the strongest ones into a new result.",
+   "author": "dmazlum",
+   "license": "MIT",
+   "repo": "https://github.com/dmazlum/herdr-arena/tree/main/",
+   "gallery": "https://herdr.dev/mods/dmazlum/herdr-arena/",
+   "mods": [
+    "arena"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "automations",
+   "title": "Automations",
+   "kind": "claude",
+   "group": "Automate and plan",
+   "about": "Scheduled agent prompts, as a side panel next to Files and Changes. A prompt, a cron line and a repo: every weekday at 9:00 an agent starts in a fresh worktree and works.",
+   "author": "DnzzL",
+   "license": "MIT",
+   "repo": "https://github.com/DnzzL/herdr-automations/tree/main/app",
+   "gallery": "https://herdr.dev/mods/DnzzL/herdr-automations--app/",
+   "mods": [
+    "automations"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": "the herdr-automations CLI from its repo",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "over9k-todos",
+   "title": "Over9k To-do",
+   "kind": "claude",
+   "group": "Automate and plan",
+   "about": "Agentic to-do lists, one per project, that your agents keep for you. Ask for something and it's on the list; when the agent finishes, it's ticked.",
+   "author": "herunan",
+   "license": "MIT",
+   "repo": "https://github.com/herunan/herdr-over9k/tree/main/over9k-todo",
+   "gallery": "https://herdr.dev/mods/herunan/herdr-over9k--over9k-todo/",
+   "mods": [
+    "over9k-todos"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": "Python 3",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "desk",
+   "title": "Desk",
+   "kind": "claude",
+   "group": "Automate and plan",
+   "about": "A panel on the right of the window for the agent you're on: the questions it is waiting on you for, each with an answer box and its recommendation; the worklist it is working through; one-click prompt buttons; a notes area for your own ideas about that agent; and, for Claude Code agents, how full its context is. Agents post with a tiny desk shell command that prints ok, so it costs them almost no tokens; your answers go back as one typed prompt, so nothing polls.",
+   "author": "CMehlstaeubler",
+   "license": "MIT",
+   "repo": "https://github.com/CMehlstaeubler/herdr-desk/tree/main/",
+   "gallery": "https://herdr.dev/mods/CMehlstaeubler/herdr-desk/",
+   "mods": [
+    "desk"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "herd",
+   "title": "Herd",
+   "kind": "claude",
+   "group": "Automate and plan",
+   "about": "A side panel, next to Files and Changes, that shows everything the Claude Code session in view has started. A round map shows the session in the middle and its workers on an orbit.",
+   "author": "adamentwistle",
+   "license": "MIT",
+   "repo": "https://github.com/adamentwistle/herdr-herd/tree/main/",
+   "gallery": "https://herdr.dev/mods/adamentwistle/herdr-herd/",
+   "mods": [
+    "herd"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": "Python 3",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "float-space",
+   "title": "Float Space",
+   "kind": "general",
+   "group": "Work faster",
+   "about": "A floating scratch window over whatever Herdr shows: terminal tabs of its own and up to five named notes shared by every space. Ctrl+Shift+Space shows it in any layout without changing that layout, and hides it again with its shells and their programs still running, returning the keyboard to the pane underneath.",
+   "author": "thuanlm215",
+   "license": "MIT",
+   "repo": "https://github.com/thuanlm215/herdr-float-space/tree/main/",
+   "gallery": "https://herdr.dev/mods/thuanlm215/herdr-float-space/",
+   "mods": [
+    "float-space",
+    "float-space-close",
+    "float-space-new",
+    "float-space-next",
+    "float-space-notes",
+    "float-space-prev"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "recall",
+   "title": "Recall",
+   "kind": "general",
+   "group": "Work faster",
+   "about": "Recall is recent + fuzzy. One key lists every space, tab, pane and agent you've been in, most recently focused first, and opens on the one you were in just before this one, so Enter takes you back.",
+   "author": "shihyuho",
+   "license": "MIT",
+   "repo": "https://github.com/shihyuho/herdr-recall/tree/main/",
+   "gallery": "https://herdr.dev/mods/shihyuho/herdr-recall/",
+   "mods": [
+    "recall"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "jump",
+   "title": "Jump",
+   "kind": "general",
+   "group": "Work faster",
+   "about": "A popup that lists every space with its tabs and jumps to one when you type its letter. tmux's prefix+w with vimium's hints, in place of the built-in picker.",
+   "author": "CodeyPacker",
+   "license": "MIT",
+   "repo": "https://github.com/CodeyPacker/herdr-mods/tree/main/jump",
+   "gallery": "https://herdr.dev/mods/CodeyPacker/herdr-mods--jump/",
+   "mods": [
+    "jump"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "find-in-files",
+   "title": "Find in Files",
+   "kind": "general",
+   "group": "Work faster",
+   "about": "A key opens a dialog over the window, like JetBrains' Find in Files. The person types text.",
+   "author": "napalmpapalam",
+   "license": "MIT",
+   "repo": "https://github.com/napalmpapalam/herdr-find-in-files/tree/main/",
+   "gallery": "https://herdr.dev/mods/napalmpapalam/herdr-find-in-files/",
+   "mods": [
+    "find-in-files"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "kiosk",
+   "title": "Kiosk",
+   "kind": "general",
+   "group": "Work faster",
+   "about": "A fuzzy finder for your Git repositories and their branches, opened in a large popup over the window. Type to filter, press Enter or click, and kiosk opens the repository as a space, or the branch in its own worktree and space, making the worktree and the branch if they don't exist yet.",
+   "author": "thomasschafer",
+   "license": "MIT",
+   "repo": "https://github.com/thomasschafer/kiosk/tree/main/",
+   "gallery": "https://herdr.dev/mods/thomasschafer/kiosk/",
+   "mods": [
+    "kiosk",
+    "kiosk-diff"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "open-with",
+   "title": "Open with",
+   "kind": "general",
+   "group": "Work faster",
+   "about": "Cmd+Shift+O opens a small picker at the top of the window that opens the focused pane's folder in a code editor installed on this computer. It finds your editors by itself (Cursor, VS Code, Zed, Windsurf, Antigravity, Kiro, Sublime Text, the JetBrains IDEs, Xcode and more), puts the last one you used first, and opens Neovim, Helix or Vim in a split beside the pane.",
+   "author": "jlopezlira",
+   "license": "Apache-2.0",
+   "repo": "https://github.com/jlopezlira/herdr-kanso/tree/main/open-with",
+   "gallery": "https://herdr.dev/mods/jlopezlira/herdr-kanso--open-with/",
+   "mods": [
+    "open-with"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "ssh-hosts",
+   "title": "SSH hosts",
+   "kind": "general",
+   "group": "Work faster",
+   "about": "An SSH row in the sidebar that opens a searchable list of the hosts in your ~/.ssh/config, grouped by the comments in that file. Each host opens an SSH terminal or a two-pane SFTP browser (this computer on the left, the server on the right, FileZilla style) with a transfer queue.",
+   "author": "thebends2k",
+   "license": "MIT",
+   "repo": "https://github.com/thebends2k/herdr-ssh-hosts/tree/main/",
+   "gallery": "https://herdr.dev/mods/thebends2k/herdr-ssh-hosts/",
+   "mods": [
+    "ssh-hosts"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "run",
+   "title": "Run",
+   "kind": "general",
+   "group": "Run your project",
+   "about": "A popup that runs the processes a repo declares (dev server, API, workers) as background herdr-core terminals and lets you start, stop, restart and peek at them with single keys. The mprocs idea, with letter hints instead of a list.",
+   "author": "CodeyPacker",
+   "license": "MIT",
+   "repo": "https://github.com/CodeyPacker/herdr-mods/tree/main/run",
+   "gallery": "https://herdr.dev/mods/CodeyPacker/herdr-mods--run/",
+   "mods": [
+    "run"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "run-scripts",
+   "title": "run-scripts",
+   "kind": "general",
+   "group": "Run your project",
+   "about": "A small run control for JavaScript projects, in the style of Android Studio. It shows the package manager icon, the chosen script name and a down chevron, then a play button.",
+   "author": "cybertron288",
+   "license": "MIT",
+   "repo": "https://github.com/cybertron288/herdr-mods/tree/main/run-scripts",
+   "gallery": "https://herdr.dev/mods/cybertron288/herdr-mods--run-scripts/",
+   "mods": [
+    "run-scripts"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "greenflagged",
+   "title": "Greenflagged",
+   "kind": "general",
+   "group": "Run your project",
+   "about": "A dependency tree viewer for Herdr. It follows the terminal you're working in and shows the project's dependency tree for npm, Python, Rust, Go, Java and Kotlin, read from its manifest and lockfile.",
+   "author": "greenflagged",
+   "license": "MIT",
+   "repo": "https://github.com/greenflagged/herdr-greenflagged/tree/main/",
+   "gallery": "https://herdr.dev/mods/greenflagged/herdr-greenflagged/",
+   "mods": [
+    "greenflagged"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "github",
+   "title": "GitHub",
+   "kind": "general",
+   "group": "Git and GitHub",
+   "about": "Your pull requests in one popup, sorted by whose move it is: yours, the ones waiting on your review, and this repo's. Open one to see whether it can merge and why not, with its failing checks, reviews and conversation; merge it, auto-merge it or send it through the merge queue, or flip it between draft and ready.",
+   "author": "mrolafsson",
+   "license": "MIT",
+   "repo": "https://github.com/mrolafsson/herdr-github/tree/main/app",
+   "gallery": "https://herdr.dev/mods/mrolafsson/herdr-github--app/",
+   "mods": [
+    "github"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": "GitHub CLI (gh)",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "markdown-panel",
+   "title": "Markdown panel",
+   "kind": "general",
+   "group": "Notes and docs",
+   "about": "The plans, notes and reviews your agents write, in a window over any layout: formatted, and edited where they read. Double-click a paragraph, a list or a heading to edit just that block while the rest stays formatted; a table opens as a grid of cells.",
+   "author": "jlopezlira",
+   "license": "Apache-2.0",
+   "repo": "https://github.com/jlopezlira/herdr-kanso/tree/main/markdown-panel",
+   "gallery": "https://herdr.dev/mods/jlopezlira/herdr-kanso--markdown-panel/",
+   "mods": [
+    "markdown-panel"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "herdr-md",
+   "title": "herdr-md",
+   "kind": "general",
+   "group": "Notes and docs",
+   "about": "A markdown file rendered natively in a Herdr pane (real heading sizes, theme colors, tables, images, typeset math, Mermaid diagrams) that a coding agent can drive from the shell: it highlights blocks, attaches notes and glides the view to them, and reads back what the person selected.",
+   "author": "ryanthedev",
+   "license": "MIT",
+   "repo": "https://github.com/ryanthedev/herdr-md/tree/main/",
+   "gallery": "https://herdr.dev/mods/ryanthedev/herdr-md/",
+   "mods": [
+    "herdr-md"
+   ],
+   "show": "pane",
+   "size": null,
+   "needs": "Node.js",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "tab-notes",
+   "title": "Tab notes",
+   "kind": "general",
+   "group": "Notes and docs",
+   "about": "A notes panel that follows the tab you're looking at. Each tab gets its own markdown note: what the agent in it is doing, what's left, what you decided.",
+   "author": "ozcberkay",
+   "license": "Apache-2.0",
+   "repo": "https://github.com/ozcberkay/herdr-coban/tree/main/tab-notes",
+   "gallery": "https://herdr.dev/mods/ozcberkay/herdr-coban--tab-notes/",
+   "mods": [
+    "tab-notes"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "blueprint",
+   "title": "Blueprint",
+   "kind": "general",
+   "group": "Notes and docs",
+   "about": "A pane (or tab-bar side panel) that draws what the tab's coding agent is building. The agent writes Mermaid flowcharts into Blueprint's data folder; Blueprint lays them out on a dotted canvas, marks finished boxes with a check and work in progress in yellow, and turns a click on a box into a change request typed into that agent's terminal.",
+   "author": "chappse6",
+   "license": "MIT",
+   "repo": "https://github.com/chappse6/herdr-blueprint-app/tree/master/",
+   "gallery": "https://herdr.dev/mods/chappse6/herdr-blueprint-app/",
+   "mods": [
+    "blueprint"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "vitals",
+   "title": "Vitals",
+   "kind": "general",
+   "group": "Keep an eye on things",
+   "about": "How the machine your agents run on is doing, live, in a window that stays beside your work. Its CPU as a graphic equalizer, a band a core lit green, yellow then red with peaks that hold and fall, memory, load and network as meters, and its disks, with a word on how it's doing: OK, or WARN and HOT and why.",
+   "author": "mrolafsson",
+   "license": "MIT",
+   "repo": "https://github.com/mrolafsson/herdr-vitals/tree/main/app",
+   "gallery": "https://herdr.dev/mods/mrolafsson/herdr-vitals--app/",
+   "mods": [
+    "vitals"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "pageme",
+   "title": "PageMe",
+   "kind": "general",
+   "group": "Keep an eye on things",
+   "about": "A panel and a small daemon. When an agent is blocked, the person gets a Telegram message with its question and a button per option, and answers from their phone.",
+   "author": "adamentwistle",
+   "license": "MIT",
+   "repo": "https://github.com/adamentwistle/herdr-pageme/tree/main/",
+   "gallery": "https://herdr.dev/mods/adamentwistle/herdr-pageme/",
+   "mods": [
+    "pageme"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": "a Telegram bot (see its README)",
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "herdr-pets",
+   "title": "herdr-pets",
+   "kind": "general",
+   "group": "Just for fun",
+   "about": "A strip along the bottom of the window where every running agent is a small pixel creature that roams the whole row. Color and motion show each agent's status, so a blocked agent is easy to spot without reading the sidebar.",
+   "author": "Aryan1092raj",
+   "license": "MIT",
+   "repo": "https://github.com/Aryan1092raj/Herdr-pets/tree/main/",
+   "gallery": "https://herdr.dev/mods/Aryan1092raj/Herdr-pets/",
+   "mods": [
+    "herdr-pets"
+   ],
+   "show": "place",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "lichess",
+   "title": "Lichess",
+   "kind": "general",
+   "group": "Just for fun",
+   "about": "A side panel that brings Lichess into Herdr: the puzzle of the day, Lichess TV with live moves, and your own games, from finding an opponent to stepping through what you played. Boards look like Lichess's brown board, with Lichess's pieces and arrows.",
+   "author": "Ghamza-Jd",
+   "license": "MIT",
+   "repo": "https://github.com/Ghamza-Jd/herdr-lichess/tree/master/",
+   "gallery": "https://herdr.dev/mods/Ghamza-Jd/herdr-lichess/",
+   "mods": [
+    "lichess"
+   ],
+   "show": "side",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "jumpycritter",
+   "title": "Jumpy Critter",
+   "kind": "general",
+   "group": "Just for fun",
+   "about": "A one-button game in a dialog over the window. A small pixel character flaps through gaps between stacks of terminal windows, scrolling right to left, while your agents work.",
+   "author": "adamentwistle",
+   "license": "MIT",
+   "repo": "https://github.com/adamentwistle/herdr-jumpy-critter/tree/main/",
+   "gallery": "https://herdr.dev/mods/adamentwistle/herdr-jumpy-critter/",
+   "mods": [
+    "jumpycritter"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  },
+  {
+   "id": "crawlspace",
+   "title": "Crawlspace",
+   "kind": "general",
+   "group": "Just for fun",
+   "about": "A first-person shooter in a dialog over the window, to play while agents work. You walk grid-based corridors under a server room and shoot bugs across three levels, ending at a boss.",
+   "author": "adamentwistle",
+   "license": "MIT",
+   "repo": "https://github.com/adamentwistle/herdr-crawlspace/tree/main/",
+   "gallery": "https://herdr.dev/mods/adamentwistle/herdr-crawlspace/",
+   "mods": [
+    "crawlspace"
+   ],
+   "show": "open",
+   "size": null,
+   "needs": null,
+   "preview": "preview.jpg"
+  }
+ ]
+}

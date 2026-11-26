@@ -286,6 +286,74 @@ Right-click a session, a tab or a hub card, or press <kbd>Ctrl</kbd> <kbd>Shift<
 
 **Settings → Notifications** sets, for each kind of notification, whether it pops up, plays a sound and goes to the drawer. It also covers do not disturb, how long pop-ups stay, the badge (number, dot or nothing), how many notifications to keep, and whether rings and sidebar lines show.
 
+### Community add-ons, off until you want them
+
+**Settings → Claude tools** and **Settings → Add-ons** offer 47 mods from the [Herdr gallery](https://herdr.dev/gallery/), made by people in the Herdr community. None is on when you install Zendr. Each card shows a picture, what it does, where it appears, what it needs (Node.js, Python 3, the GitHub CLI) and who made it. Search them, filter by on or off, topic and where they show, and flip a switch: the add-on appears at once, with no restart. Turning it off takes it out of the layout and deletes the copy; nothing else of yours is touched.
+
+Every add-on ships unchanged with its author's licence (`config/addons/<name>/LICENSE`) and a `NOTICE.md` naming its author and source. Only MIT and Apache-2.0 mods are included. On Windows, mods written for macOS and Linux get Git for Windows' Unix tools and the `py` launcher for `python3`.
+
+<details>
+<summary>Every add-on and who made it</summary>
+
+**Claude tools** (26)
+
+| Add-on | What it does | Shows | By | Licence |
+| --- | --- | --- | --- | --- |
+| [Usage limits](https://github.com/nozikov/herdr-usage-limits/tree/main/) | Your Claude Code and Codex subscription limits in the Herdr status bar, always in view: every limit window each one reports (5-hour, weekly, per-model weekly such as Fable), with a bar, a pace tick, the percent used and, when it gets tight, the time to reset. | status bar | [nozikov](https://github.com/nozikov) | MIT |
+| [Claude usage](https://github.com/cunderw/herdr-claude-usage/tree/main/) | How much of your Claude limits your agents are using, and when they'll run out. | popup | [cunderw](https://github.com/cunderw) | MIT |
+| [Insights](https://github.com/GaganSD/coding-agent-toolkit/tree/main/herdr-insights) | A native Herdr dashboard for token usage across Pi, Codex, Claude Code, OpenCode, and Antigravity. | own tab | [GaganSD](https://github.com/GaganSD) | MIT |
+| [Skill Ledger](https://github.com/felixfisher/herdr-skill-ledger/tree/main/) | A side panel that shows which skills and MCP servers a person really uses, counted from the local logs of Claude Code and Pi. | side panel | [felixfisher](https://github.com/felixfisher) | MIT |
+| [Wrapped](https://github.com/adamentwistle/herdr-wrapped/tree/main/) | An overlay that shows a person their Claude Code stats as a card to share. | popup | [adamentwistle](https://github.com/adamentwistle) | MIT |
+| [Agent sessions](https://github.com/cunderw/herdr-sessions/tree/main/) | A popup that finds any past Claude Code or Codex session, across every project, by its title, folder or what was said in it. | popup | [cunderw](https://github.com/cunderw) | MIT |
+| [Revive](https://github.com/dmazlum/herdr-revive/tree/main/) | Revive brings back the coding agent a Herdr terminal lost to a reboot or a herdr-core restart, in the same pane, with the same session and flags. | popup | [dmazlum](https://github.com/dmazlum) | MIT |
+| [Reopen closed tab](https://github.com/mustafaTokmak/herdr-reopen-tab/tree/main/) | Cmd+Shift+T for the Herdr desktop app, like a browser's: it brings back the tab you closed last, where it was in its space, with its name and its panes in their folders, and agents (Claude Code, Codex) pick up their last conversation there. | popup | [mustafaTokmak](https://github.com/mustafaTokmak) | MIT |
+| [Claude tab name](https://github.com/iml885203/herdr-mods/tree/main/claude-tab-name) | A tab and its Claude Code session keep the same name: /rename in Claude renames the tab, and F2 renames both. | popup | [iml885203](https://github.com/iml885203) | MIT |
+| [Recap](https://github.com/mrolafsson/herdr-recap/tree/main/app) | Come back to a dozen agents and know in seconds which ones need you. | popup | [mrolafsson](https://github.com/mrolafsson) | MIT |
+| [Over9k Switcher](https://github.com/herunan/herdr-over9k/tree/main/over9k-switcher) | Jump between agents the way you switch apps. | popup | [herunan](https://github.com/herunan) | MIT |
+| [Over9k Timeline](https://github.com/herunan/herdr-over9k/tree/main/over9k-timeline) | See exactly what happened, prompt by prompt. | side panel | [herunan](https://github.com/herunan) | MIT |
+| [Prompt History](https://github.com/ReyArlena/herdr-mods/tree/main/prompt-history) | A panel that shows every prompt you gave a Claude Code agent in its current session, and what it answered, as a column of cards. | popup | [ReyArlena](https://github.com/ReyArlena) | MIT |
+| [Prompt Jump](https://github.com/doominkim/herdr-prompt-jump/tree/main/) | A panel beside the terminals that lists, oldest first, the prompts the person typed into the focused Claude Code, Codex or omp session. | side panel | [doominkim](https://github.com/doominkim) | MIT |
+| [Redpen](https://github.com/imutaroh/herdr-redpen/tree/main/) | Comment on Claude Code's latest reply, block by block, and send all the comments back as one message. | popup | [imutaroh](https://github.com/imutaroh) | MIT |
+| [Fleece](https://github.com/dmazlum/herdr-fleece/tree/main/app) | Fleece pulls things out of a Claude Code or Codex agent's answers. | popup | [dmazlum](https://github.com/dmazlum) | MIT |
+| [Claude goal](https://github.com/iml885203/herdr-mods/tree/main/claude-goal) | Write the next /goal for the Claude Code session you're in, with one key. | popup | [iml885203](https://github.com/iml885203) | MIT |
+| [Agent review](https://github.com/jkuepker/herdr-mods/tree/main/agent-review) | A window that shows what an agent (Claude Code, Codex, any agent running in a Herdr terminal) changed in its repo since you last looked. | popup | [jkuepker](https://github.com/jkuepker) | MIT |
+| [Walkthrough](https://github.com/dmazlum/herdr-walkthrough/tree/main/) | A dialog (or pane) that turns the diff of the focused terminal's repository into a guided reading: Claude groups related hunks into steps, orders them so each builds on the last, and explains what each step changes, with the step's code under the explanation. | popup | [dmazlum](https://github.com/dmazlum) | MIT |
+| [Tourist](https://github.com/CodeyPacker/herdr-mods/tree/main/tourist) | A pane where Claude or Codex gives you a guided tour of code: your branch's changes, the last commit, the whole repo, or a feature you describe. | popup | [CodeyPacker](https://github.com/CodeyPacker) | MIT |
+| [Session changes](https://github.com/iml885203/herdr-mods/tree/main/session-changes) | See what a Claude Code session changed across its repos, from a summary down to the diff. | popup | [iml885203](https://github.com/iml885203) | MIT |
+| [Arena](https://github.com/dmazlum/herdr-arena/tree/main/) | Arena hands one task to several coding agents at once, each in its own git worktree, then lays their results out as cards: status, latest answer, +ins −del · N files and time. | popup | [dmazlum](https://github.com/dmazlum) | MIT |
+| [Automations](https://github.com/DnzzL/herdr-automations/tree/main/app) | Scheduled agent prompts, as a side panel next to Files and Changes. | side panel | [DnzzL](https://github.com/DnzzL) | MIT |
+| [Over9k To-do](https://github.com/herunan/herdr-over9k/tree/main/over9k-todo) | Agentic to-do lists, one per project, that your agents keep for you. | side panel | [herunan](https://github.com/herunan) | MIT |
+| [Desk](https://github.com/CMehlstaeubler/herdr-desk/tree/main/) | A panel on the right of the window for the agent you're on: the questions it is waiting on you for, each with an answer box and its recommendation; the worklist it is working through; one-click prompt buttons; a notes area for your own ideas about that agent; and, for Claude Code agents, how full its context is. | side panel | [CMehlstaeubler](https://github.com/CMehlstaeubler) | MIT |
+| [Herd](https://github.com/adamentwistle/herdr-herd/tree/main/) | A side panel, next to Files and Changes, that shows everything the Claude Code session in view has started. | side panel | [adamentwistle](https://github.com/adamentwistle) | MIT |
+
+**Add-ons** (21)
+
+| Add-on | What it does | Shows | By | Licence |
+| --- | --- | --- | --- | --- |
+| [Float Space](https://github.com/thuanlm215/herdr-float-space/tree/main/) | A floating scratch window over whatever Herdr shows: terminal tabs of its own and up to five named notes shared by every space. | popup | [thuanlm215](https://github.com/thuanlm215) | MIT |
+| [Recall](https://github.com/shihyuho/herdr-recall/tree/main/) | Recall is recent + fuzzy. | popup | [shihyuho](https://github.com/shihyuho) | MIT |
+| [Jump](https://github.com/CodeyPacker/herdr-mods/tree/main/jump) | A popup that lists every space with its tabs and jumps to one when you type its letter. | popup | [CodeyPacker](https://github.com/CodeyPacker) | MIT |
+| [Find in Files](https://github.com/napalmpapalam/herdr-find-in-files/tree/main/) | A key opens a dialog over the window, like JetBrains' Find in Files. | popup | [napalmpapalam](https://github.com/napalmpapalam) | MIT |
+| [Kiosk](https://github.com/thomasschafer/kiosk/tree/main/) | A fuzzy finder for your Git repositories and their branches, opened in a large popup over the window. | popup | [thomasschafer](https://github.com/thomasschafer) | MIT |
+| [Open with](https://github.com/jlopezlira/herdr-kanso/tree/main/open-with) | Cmd+Shift+O opens a small picker at the top of the window that opens the focused pane's folder in a code editor installed on this computer. | popup | [jlopezlira](https://github.com/jlopezlira) | Apache-2.0 |
+| [SSH hosts](https://github.com/thebends2k/herdr-ssh-hosts/tree/main/) | An SSH row in the sidebar that opens a searchable list of the hosts in your ~/.ssh/config, grouped by the comments in that file. | popup | [thebends2k](https://github.com/thebends2k) | MIT |
+| [Run](https://github.com/CodeyPacker/herdr-mods/tree/main/run) | A popup that runs the processes a repo declares (dev server, API, workers) as background herdr-core terminals and lets you start, stop, restart and peek at them with single keys. | popup | [CodeyPacker](https://github.com/CodeyPacker) | MIT |
+| [run-scripts](https://github.com/cybertron288/herdr-mods/tree/main/run-scripts) | A small run control for JavaScript projects, in the style of Android Studio. | side panel | [cybertron288](https://github.com/cybertron288) | MIT |
+| [Greenflagged](https://github.com/greenflagged/herdr-greenflagged/tree/main/) | A dependency tree viewer for Herdr. | side panel | [greenflagged](https://github.com/greenflagged) | MIT |
+| [GitHub](https://github.com/mrolafsson/herdr-github/tree/main/app) | Your pull requests in one popup, sorted by whose move it is: yours, the ones waiting on your review, and this repo's. | popup | [mrolafsson](https://github.com/mrolafsson) | MIT |
+| [Markdown panel](https://github.com/jlopezlira/herdr-kanso/tree/main/markdown-panel) | The plans, notes and reviews your agents write, in a window over any layout: formatted, and edited where they read. | popup | [jlopezlira](https://github.com/jlopezlira) | Apache-2.0 |
+| [herdr-md](https://github.com/ryanthedev/herdr-md/tree/main/) | A markdown file rendered natively in a Herdr pane (real heading sizes, theme colors, tables, images, typeset math, Mermaid diagrams) that a coding agent can drive from the shell: it highlights blocks, attaches notes and glides the view to them, and reads back what the person selected. | beside the terminal | [ryanthedev](https://github.com/ryanthedev) | MIT |
+| [Tab notes](https://github.com/ozcberkay/herdr-coban/tree/main/tab-notes) | A notes panel that follows the tab you're looking at. | side panel | [ozcberkay](https://github.com/ozcberkay) | Apache-2.0 |
+| [Blueprint](https://github.com/chappse6/herdr-blueprint-app/tree/master/) | A pane (or tab-bar side panel) that draws what the tab's coding agent is building. | side panel | [chappse6](https://github.com/chappse6) | MIT |
+| [Vitals](https://github.com/mrolafsson/herdr-vitals/tree/main/app) | How the machine your agents run on is doing, live, in a window that stays beside your work. | popup | [mrolafsson](https://github.com/mrolafsson) | MIT |
+| [PageMe](https://github.com/adamentwistle/herdr-pageme/tree/main/) | A panel and a small daemon. | popup | [adamentwistle](https://github.com/adamentwistle) | MIT |
+| [herdr-pets](https://github.com/Aryan1092raj/Herdr-pets/tree/main/) | A strip along the bottom of the window where every running agent is a small pixel creature that roams the whole row. | window edge | [Aryan1092raj](https://github.com/Aryan1092raj) | MIT |
+| [Lichess](https://github.com/Ghamza-Jd/herdr-lichess/tree/master/) | A side panel that brings Lichess into Herdr: the puzzle of the day, Lichess TV with live moves, and your own games, from finding an opponent to stepping through what you played. | side panel | [Ghamza-Jd](https://github.com/Ghamza-Jd) | MIT |
+| [Jumpy Critter](https://github.com/adamentwistle/herdr-jumpy-critter/tree/main/) | A one-button game in a dialog over the window. | popup | [adamentwistle](https://github.com/adamentwistle) | MIT |
+| [Crawlspace](https://github.com/adamentwistle/herdr-crawlspace/tree/main/) | A first-person shooter in a dialog over the window, to play while agents work. | popup | [adamentwistle](https://github.com/adamentwistle) | MIT |
+
+</details>
+
 ## ⌨ Keyboard
 
 | Keys | Does |
@@ -393,6 +461,7 @@ Zendr stands on two projects:
 - **[Herdr](https://herdr.dev)** ([herdrdev](https://github.com/herdrdev)) is the software Zendr is made from. Herdr does the hard part: terminals that keep running in a background core, agent status, spaces and tabs, the mod system and the GPU-rendered UI. Zendr is Herdr's desktop app, renamed, with a new face and a set of mods.
 - **[cmux](https://cmux.com)** by Manaflow inspired the notifications, attention rings, the sidebar's status lines and agent summaries. No cmux code is included.
 - **[Warp](https://www.warp.dev)** inspired command search, workflows, Ask AI and launch configurations. No Warp code is included.
+- **The Herdr community**: the authors of the add-ons in Settings → Claude tools and Settings → Add-ons, each credited above and in its `NOTICE.md`.
 
 ## License
 

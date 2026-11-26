@@ -1,0 +1,433 @@
+// Fleece for the Herdr app: the focused agent's last answer, and what is worth
+// carrying out of it. One mod, two shapes:
+//
+// - dock: a panel (or a pane) listing the files the agent edited and the code,
+//   commands, paths and links from its last few turns. Click a row to copy it.
+// - frame: `mod.open:fleece` opens the whole answer as rendered Markdown.
+//
+// The transcript is read by engine.mjs, run with the user's Node: a mod has no
+// file system or clipboard of its own, and the parser is the same code the
+// Herdr plugin uses.
+
+import { View, div } from "gpui-kit";
+import { v_flex, h_flex, TextView } from "gpui-base";
+import {
+  exec, agents, focused, panes, props, openOverlay, closeOverlay, notify, theme, settings, appHome,
+  run, nextCommand,
+} from "herdr";
+
+const ENGINE = () => `${appHome()}/mods/fleece/engine.mjs`;
+const FRAME = { kind: "dialog", width: 0.7, height: 0.85 };
+const SECTIONS = [["file", "FILES"], ["code", "CODE"], ["command", "COMMANDS"], ["path", "PATHS"], ["link", "LINKS"]];
+const DEFAULT_KEYS = { reload: "r", send: "s", relay: "t", open: "e", older: "[", newer: "]", frame: "o", "copy-answer": "y", save: "m", close: "q" };
+const AGENT_NAMES = { "claude-code": "claude" };
+
+// Other agents to relay to, nearest first: the same tab, the same space, the
+// rest. Number keys pick one, so there are at most nine.
+function relayTargets(from) {
+  const here = agents().find((a) => a.address === from);
+  const distance = (a) => (a.tab === here?.tab ? 0 : a.space === here?.space ? 1 : 2);
+  return agents()
+    .filter((a) => a.address !== from)
+    .map((a, order) => ({ a, order, d: distance(a) }))
+    .sort((x, y) => x.d - y.d || x.order - y.order)
+    .slice(0, 9)
+    .map(({ a }) => ({ address: a.address, label: `${AGENT_NAMES[a.app] ?? a.app ?? "agent"} ${a.tab_name || a.address}` }));
+}
+
+async function engine(args) {
+  let r;
+  try {
+    r = await exec("node", [ENGINE(), ...args]);
+  } catch (e) {
+    return { ok: false, error: `Fleece needs Node 20+ on PATH (${String(e)})` };
+  }
+  const line = r.stdout.trim().split("\n").pop() ?? "";
+  try { return JSON.parse(line); }
+  catch { return { ok: false, error: (r.stderr || r.stdout).trim() || `engine exited ${r.code}` }; }
+}
+
+// The agent to follow: the focused terminal when it is one, else the one
+// already followed, else the first agent in the tab. Clicking the dock itself
+// focuses a mod pane, which must not lose the agent behind it.
+//
+// A dock passes its own tab as `home` and only ever follows agents there.
+// Every dock keeps ticking while its space is in the background, so following
+// the app-wide focus made a dock in one space pick up an agent focused in
+// another, and show that agent's turns when you came back to it. The frame
+// passes no home: it opens over whichever agent is focused.
+function follow(previous, home = null) {
+  const f = focused();
+  const list = home ? agents().filter((a) => a.tab === home) : agents();
+  const here = list.find((a) => a.address === (f?.agent ?? f?.terminal));
+  if (here) return here;
+  const kept = previous && list.find((a) => a.address === previous);
+  if (kept) return kept;
+  return list.find((a) => a.tab === (home ?? f?.tab)) ?? null;
+}
+
+// The tab a dock lives in: its own pane's, when the app says which that is,
+// else the tab of the agent it was opened beside. Null leaves it following
+// focus anywhere, as before.
+function homeTab(given) {
+  const own = given?.pane ? panes().find((p) => p.pane === given.pane) : null;
+  if (own) return own.tab;
+  if (!given?.terminal) return null;
+  return agents().find((a) => a.address === given.terminal)?.tab
+    ?? panes().find((p) => p.terminal === given.terminal)?.tab
+    ?? null;
+}
+
+function toast(reply, ok) {
+  if (reply.ok) notify({ title: "Fleece", body: ok ?? reply.message, level: "success", timeout: 2500 });
+  else notify({ title: "Fleece", body: reply.error, level: "error" });
+}
+
+export default class Fleece extends View {
+  init(_props, cx) {
+    this.frame = Boolean(props()?.overlay);
+    this.handle = cx.focus_handle();
+    this.data = null;
+    this.error = null;
+    this.armed = null; // "send" | "open" | "relay" while waiting for an item key, "relay-to" for a target
+    this.relaying = null; // { text, what, targets } between the two relay keys
+    this.pin = props()?.pin ?? null;
+    this.address = props()?.terminal ?? null;
+    this.signature = "";
+
+    if (this.frame) {
+      this.address ??= follow(null)?.address ?? null;
+      this.handle.focus();
+      cx.timer.after(120, () => this.handle.focus());
+      this.load(cx);
+      return;
+    }
+    this.home = homeTab(props());
+    // Agent status and focus are live data, so this only compares strings;
+    // the engine runs when the followed agent or its status actually changes.
+    this.tick(cx);
+    cx.timer.every(1200, (cx) => this.tick(cx));
+    // keys.json: "cmd-shift-y": "fleece.copy" reaches a shown dock.
+    cx.spawn(async (cx) => {
+      for (;;) {
+        const command = await nextCommand();
+        if (command === "copy") this.act(["copy", ...this.turnArgs()], cx);
+        else if (command === "copy-code") this.act(["copy", "--code", ...this.turnArgs()], cx);
+        else if (command === "save") this.act(["save", ...this.turnArgs()], cx);
+        else if (command === "journal") this.act(["journal", "--terminal", this.address], cx);
+        else if (command === "frame") this.openFrame();
+        else if (command === "reload") this.load(cx);
+      }
+    });
+  }
+
+  tick(cx) {
+    const agent = follow(this.address, this.home);
+    const signature = agent ? `${agent.address}|${agent.status}` : "";
+    if (signature === this.signature) return;
+    if (agent?.address !== this.address) this.pin = null;
+    this.signature = signature;
+    this.address = agent?.address ?? null;
+    // Mid-answer the transcript has nothing new to show; wait for it to stop.
+    if (agent?.status === "working" && this.data) return cx.notify();
+    this.load(cx);
+  }
+
+  load(cx) {
+    if (!this.address) { this.data = null; this.error = null; return cx.notify(); }
+    if (this.address.includes("/")) {
+      this.data = null; this.error = "Agents on other machines are not supported yet.";
+      return cx.notify();
+    }
+    const address = this.address, pin = this.pin;
+    cx.spawn(async (cx) => {
+      const args = ["state", "--terminal", address];
+      if (pin !== null) args.push("--pin", String(pin));
+      if (!this.frame) args.push("--journal");
+      const reply = await engine(args);
+      if (address !== this.address || pin !== this.pin) return;
+      this.data = reply.ok ? reply : null;
+      this.error = reply.ok ? null : reply.error;
+      if (reply.journal) notify({ title: "Fleece", body: reply.journal, timeout: 2500 });
+      // The latest answer had not settled; forget the signature so the next tick loads again.
+      if (reply.journalPending) this.signature = null;
+      cx.notify();
+    });
+  }
+
+  keys() { return { ...DEFAULT_KEYS, ...(this.data?.keys ?? {}) }; }
+
+  step(direction, cx) {
+    const list = this.data?.answers ?? [];
+    const here = list.indexOf(this.data?.turn?.index);
+    const next = here + direction;
+    if (here < 0 || next < 0 || next >= list.length) return;
+    this.pin = next === list.length - 1 ? null : list[next];
+    this.load(cx);
+  }
+
+  turnArgs() {
+    const turn = this.data?.turn?.index;
+    return ["--terminal", this.address, ...(turn ? ["--turn", String(turn)] : [])];
+  }
+
+  act(args, cx, ok) {
+    cx.spawn(async (cx) => { toast(await engine(args), ok); cx.notify(); });
+  }
+
+  copyItem(item, cx) {
+    this.act(["clip", "--text", item.text], cx, `copied ${item.kind} · ${item.label.slice(0, 60)}`);
+  }
+
+  // Pasted, never submitted: the person presses Enter in the agent.
+  sendItem(item, cx) {
+    const address = this.address;
+    cx.spawn(async (cx) => {
+      const reply = await engine(["clip", "--text", item.text]);
+      if (!reply.ok) return toast(reply);
+      run("pane.focus", { terminal: address });
+      run("terminal.paste");
+      cx.notify();
+    });
+  }
+
+  // Relay, step one: what to carry, an item or the whole answer.
+  relayPick(key, cx) {
+    const k = this.keys();
+    const items = this.data?.items ?? [];
+    const item = items.find((i) => i.key === key);
+    if (key === k["copy-answer"]) this.relayStart(this.data?.turn?.text, "answer", cx);
+    else if (item) this.relayStart(item.text, item.kind, cx);
+  }
+
+  // Asks which agent, unless only one is left. Shared by the keys, a row's
+  // relay button and the frame. The number keys must reach this view, and a
+  // button keeps the click to itself, so the view takes focus here.
+  relayStart(text, what, cx) {
+    if (!text) return;
+    const targets = relayTargets(this.address);
+    if (targets.length === 0) return notify({ title: "Fleece", body: "no other agent to relay to", level: "warning" });
+    this.relaying = { text, what, targets };
+    if (targets.length === 1) return this.relayTo("1", cx);
+    this.armed = "relay-to";
+    this.handle.focus();
+    cx.notify();
+  }
+
+  relayHint() {
+    const list = (this.relaying?.targets ?? []).map((x, n) => `${n + 1} ${x.label}`).join(" · ");
+    return `relay ${this.relaying?.what ?? ""} → ${list} · Esc cancels`;
+  }
+
+  // Step two: which agent. Pasted like send, never submitted.
+  relayTo(key, cx) {
+    const pending = this.relaying;
+    this.relaying = null;
+    const target = /^[1-9]$/.test(key) ? pending?.targets[Number(key) - 1] : null;
+    if (!target) return;
+    const overlay = this.frame ? props().overlay : null;
+    cx.spawn(async (cx) => {
+      const reply = await engine(["clip", "--text", pending.text]);
+      if (!reply.ok) return toast(reply);
+      // The frame is a dialog over the app; close it so the paste lands in the terminal.
+      if (overlay) closeOverlay(overlay);
+      run("pane.focus", { terminal: target.address });
+      run("terminal.paste");
+      notify({ title: "Fleece", body: `relayed ${pending.what} → ${target.label}`, level: "success", timeout: 2500 });
+      cx.notify();
+    });
+  }
+
+  openItem(item, cx) {
+    if (!item.open) return notify({ title: "Fleece", body: `a ${item.kind} has nothing to open`, level: "warning" });
+    this.act(["open", "--target", item.open, ...(item.kind === "link" ? ["--link"] : [])], cx);
+  }
+
+  openFrame() {
+    openOverlay({ mod: "fleece", props: { terminal: this.address, pin: this.pin }, ...FRAME });
+  }
+
+  // From the frame: put a dock beside the agent's pane, unless its tab has one.
+  openDock() {
+    const agent = panes().find((p) => p.terminal === this.address);
+    closeOverlay(props().overlay);
+    if (!agent) return notify({ title: "Fleece", body: "that agent has no pane here", level: "warning" });
+    if (panes().some((p) => p.mod === "fleece" && p.tab === agent.tab)) return;
+    run("pane.split", { direction: "right", pane: agent.pane, mod: "fleece", props: { terminal: this.address } });
+  }
+
+  onKey(e, cx) {
+    const k = this.keys(), key = e.key_char ?? e.key;
+    if (e.modifiers?.control || e.modifiers?.platform || e.modifiers?.alt) return;
+    if (e.key === "escape") {
+      if (this.armed) { this.armed = null; this.relaying = null; return cx.notify(); }
+      if (this.frame) closeOverlay(props().overlay);
+      return;
+    }
+    const items = this.data?.items ?? [];
+    if (this.armed) {
+      const item = items.find((i) => i.key === key), mode = this.armed;
+      this.armed = null;
+      if (mode === "relay") this.relayPick(key, cx);
+      else if (mode === "relay-to") this.relayTo(key, cx);
+      else if (item) mode === "send" ? this.sendItem(item, cx) : this.openItem(item, cx);
+      return cx.notify();
+    }
+    if (key === k["copy-answer"]) return this.act(["copy", ...this.turnArgs()], cx);
+    if (key === k.save) return this.act(["save", ...this.turnArgs()], cx);
+    if (key === k.older) return this.step(-1, cx);
+    if (key === k.newer) return this.step(1, cx);
+    if (key === k.reload) return this.load(cx);
+    if (this.frame) {
+      if (key === "c") return this.act(["copy", "--code", ...this.turnArgs()], cx);
+      if (key === k.relay) return this.relayStart(this.data?.turn?.text, "answer", cx);
+      if (key === "d") return this.openDock();
+      if (key === k.close) return closeOverlay(props().overlay);
+      return;
+    }
+    if (key === k.frame) return this.openFrame();
+    if (key === k.send || key === k.open) { this.armed = key === k.send ? "send" : "open"; return cx.notify(); }
+    if (key === k.relay) { this.armed = "relay"; return cx.notify(); }
+    const item = items.find((i) => i.key === key);
+    if (item) this.copyItem(item, cx);
+  }
+
+  render(cx) {
+    const t = theme();
+    const root = v_flex().id("fleece").track_focus(this.handle)
+      .on_key_down((e, cx) => this.onKey(e, cx))
+      .on_mouse_down("left", () => this.handle.focus())
+      .size_full().min_h(0).text_size(12).text_color(t.foreground);
+    return this.frame ? this.renderFrame(root, t) : this.renderDock(root, t);
+  }
+
+  button(id, label, t, handler) {
+    return div().id(id).px(7).h(22).flex().items_center().rounded(6).text_size(11).text_color(t.muted)
+      .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => handler(cx))
+      .child(label);
+  }
+
+  // A button that shows its key in the accent color: `y Copy`, `Newer ]`.
+  keyButton(id, key, label, t, handler, after = false) {
+    const k = div().text_color(t.accent).font_medium().child(key);
+    return h_flex().id(id).px(7).h(22).gap(4).items_center().rounded(6).text_size(11).text_color(t.muted)
+      .cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => handler(cx))
+      .when(!after, (el) => el.child(k))
+      .child(div().child(label))
+      .when(after, (el) => el.child(k));
+  }
+
+  // `live` with a slowly breathing dot, or `pinned` with a still one.
+  status(pinned, t) {
+    const color = pinned ? t.blocked : t.done;
+    return h_flex().flex_none().gap(5).items_center().text_size(10.5).text_color(color)
+      .child(div().size(6).rounded(3).bg(color)
+        .when(!pinned, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 1600 })))
+      .child(pinned ? "pinned" : "live");
+  }
+
+  message(root, t, text) {
+    return root.bg(t.chrome).p(14).child(div().text_color(this.error ? t.blocked : t.dim).child(text));
+  }
+
+  renderDock(root, t) {
+    const d = this.data, k = this.keys();
+    if (!this.address) return this.message(root, t, "Focus an agent to fleece its answers.");
+    if (this.error) return this.message(root, t, this.error);
+    if (!d) return this.message(root, t, "Reading the transcript…");
+
+    const mono = settings().font_family ?? "JetBrains Mono";
+    const items = d.items ?? [];
+    const header = h_flex().h(34).flex_none().px(12).gap(7).items_center().border_b_1().border_color(t.border)
+      .child(div().font_semibold().text_size(12.5).child("Fleece"))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.dim).text_size(11).child(d.label))
+      .child(this.status(d.pinned, t));
+
+    const sections = SECTIONS.map(([kind, title]) => [title, items.filter((i) => i.kind === kind)])
+      .filter(([, rows]) => rows.length > 0);
+
+    const list = v_flex().id("fleece-items").flex_1().min_h(0).overflow_y_scrollbar().py(8).gap(10)
+      .when(sections.length === 0, (el) => el.child(div().px(12).text_color(t.dim).child("Nothing to carry out of these turns.")))
+      .children(sections.map(([title, rows]) => v_flex().gap(1)
+        .child(h_flex().px(12).pb(2).gap(6).items_center()
+          .child(div().text_size(10.5).font_medium().text_color(t.dim).child(title))
+          .child(div().text_size(10).text_color(t.dim).opacity(0.6).child(String(rows.length))))
+        .children(rows.map((item, n) => this.row(item, `${title}-${n}`, t, mono)))));
+
+    const hint = this.armed === "relay-to"
+      ? this.relayHint()
+      : this.armed === "relay"
+        ? `relay — press an item key or ${k["copy-answer"]} for the answer · Esc cancels`
+        : this.armed
+          ? `${this.armed} — press an item key · Esc cancels`
+          : `key copy · ${k.send} send · ${k.relay} relay · ${k.open} open · ${k["copy-answer"]} all · ${k.save} save · ${k.frame} frame · ${k.older}${k.newer} turn`;
+
+    const footer = v_flex().flex_none().border_t_1().border_color(t.border).px(6).py(4).gap(2)
+      .child(h_flex().gap(2).flex_wrap()
+        .child(this.keyButton("f-copy", k["copy-answer"], "Copy all", t, (cx) => this.act(["copy", ...this.turnArgs()], cx)))
+        .child(this.keyButton("f-save", k.save, "Save", t, (cx) => this.act(["save", ...this.turnArgs()], cx)))
+        .child(this.keyButton("f-frame", k.frame, "Frame", t, () => this.openFrame()))
+        .child(div().flex_1())
+        .child(this.button("f-older", "‹", t, (cx) => this.step(-1, cx)))
+        .child(this.button("f-newer", "›", t, (cx) => this.step(1, cx))))
+      .child(div().px(4).text_size(10.5).text_color(this.armed ? t.accent : t.dim).truncate().child(hint));
+
+    return root.bg(t.chrome).child(header).child(list).child(footer);
+  }
+
+  row(item, id, t, mono) {
+    const code = item.kind === "code" || item.kind === "command";
+    return h_flex().id(`row-${id}`).h(26).mx(4).px(6).gap(6).items_center().rounded(6).cursor_pointer()
+      .border_l_2().border_color(t.accent + "00")
+      .hover((s) => s.bg(t.hover).border_color(t.accent))
+      .on_click((_e, cx) => this.copyItem(item, cx))
+      .child(div().w(14).flex_none().text_size(10.5).text_color(this.armed ? t.accent : t.dim).child(item.key ?? ""))
+      .when(Boolean(item.tag), (el) => el.child(div().flex_none().px(4).h(16).flex().items_center().rounded(4)
+        .bg(t.accent + "1f").text_size(10).text_color(t.accent).child(item.tag)))
+      .child(div().flex_1().min_w(0).truncate().when(code, (el) => el.font_family(mono).text_size(11.5)).child(item.label))
+      .when(Boolean(item.detail), (el) => el.child(div().flex_none().text_size(10.5).text_color(t.dim).child(item.detail)))
+      .child(this.button(`send-${id}`, "send", t, (cx) => this.sendItem(item, cx)))
+      .child(this.button(`relay-${id}`, "relay", t, (cx) => this.relayStart(item.text, item.kind, cx)))
+      .when(Boolean(item.open), (el) => el.child(this.button(`open-${id}`, "open", t, (cx) => this.openItem(item, cx))));
+  }
+
+  renderFrame(root, t) {
+    const d = this.data, k = this.keys();
+    root = root.bg(t.popover);
+    if (!this.address) return this.message(root, t, "No agent is focused.");
+    if (this.error) return this.message(root, t, this.error);
+    if (!d?.turn) return this.message(root, t, d ? "This session has no answer yet." : "Reading the transcript…");
+
+    const turn = d.turn;
+    const meta = [`turn ${turn.index}`, turn.model, d.pinned ? `${d.answers.length - 1 - d.answers.indexOf(turn.index)} back` : null]
+      .filter(Boolean).join(" · ");
+    return root
+      .child(v_flex().flex_none().px(20).pt(16).pb(12).gap(5).border_b_1().border_color(t.border)
+        .child(h_flex().items_center().justify_between()
+          .child(h_flex().gap(8).items_center()
+            .child(div().text_size(15).font_semibold().child("Fleece"))
+            .when(d.pinned, (el) => el.child(this.status(true, t))))
+          .child(div().text_size(11).text_color(t.dim).child(meta)))
+        .when(Boolean(turn.prompt), (el) => el.child(h_flex().gap(6).min_w(0).text_size(11.5)
+          .child(div().flex_none().text_color(t.accent).child("›"))
+          .child(div().flex_1().min_w(0).text_color(t.muted).truncate().child(turn.prompt.split("\n")[0])))))
+      .child(div().id("fleece-answer").flex_1().min_h(0).overflow_y_scrollbar().px(22).py(14)
+        .child(TextView.markdown(`fleece-md-${turn.index}`, turn.text).selectable(true)))
+      .when(this.armed === "relay-to", (el) => el.child(div().flex_none().px(18).py(6).border_t_1().border_color(t.border)
+        .text_size(11).text_color(t.accent).truncate().child(this.relayHint())))
+      .child(h_flex().flex_none().h(34).px(12).gap(2).items_center().border_t_1().border_color(t.border)
+        .child(this.keyButton("x-copy", k["copy-answer"], "Copy", t, (cx) => this.act(["copy", ...this.turnArgs()], cx)))
+        .child(this.keyButton("x-code", "c", "Copy code", t, (cx) => this.act(["copy", "--code", ...this.turnArgs()], cx)))
+        .child(this.keyButton("x-relay", k.relay, "Relay", t, (cx) => this.relayStart(turn.text, "answer", cx)))
+        .child(this.keyButton("x-save", k.save, "Save", t, (cx) => this.act(["save", ...this.turnArgs()], cx)))
+        .child(this.keyButton("x-dock", "d", "Dock", t, () => this.openDock()))
+        .child(div().flex_1())
+        .child(this.keyButton("x-older", k.older, "Older", t, (cx) => this.step(-1, cx)))
+        .child(this.keyButton("x-newer", k.newer, "Newer", t, (cx) => this.step(1, cx), true))
+        .child(this.button("x-close", "Esc", t, () => closeOverlay(props().overlay))));
+  }
+}

@@ -15,6 +15,13 @@ foreach ($mod in Get-ChildItem -Directory (Join-Path $PSScriptRoot "mods")) {
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "layouts\main-review.json") -Destination (Join-Path $config "layouts\main-review.json") -Force
 Write-Host "layout  main-review"
 
+# The add-ons Settings > Claude tools and Settings > Add-ons offer: community mods, all
+# switched off. Only the catalog is replaced; ones you turned on keep running from mods\.
+$addons = Join-Path $config "addons"
+if (Test-Path -LiteralPath $addons) { Remove-Item -LiteralPath $addons -Recurse -Force }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot "addons") -Destination $addons -Recurse
+Write-Host "addons  $((Get-ChildItem -Directory $addons).Count) (all off until you turn them on in Settings)"
+
 # Adds Zendr's shortcuts to keys.json, keeping every binding already there.
 $keysPath = Join-Path $config "keys.json"
 $keys = if (Test-Path -LiteralPath $keysPath) { Get-Content -Raw -LiteralPath $keysPath | ConvertFrom-Json } else { [pscustomobject]@{} }
