@@ -8,7 +8,11 @@
 # Zendr in the Start menu, `zendr` and `hc` on your PATH, and Zendr's mods and
 # layout in ~\.config\herdr-app. Running it again updates everything; terminals
 # that are running keep running, and an open Zendr keeps going until you reopen it.
-param([switch]$NoLaunch)
+#
+#   -NoPath   leaves your PATH alone: Zendr still finds its core, but `zendr` and
+#             `hc` only run by their full path (%LOCALAPPDATA%\Programs\...).
+#   -NoLaunch doesn't open Zendr when done.
+param([switch]$NoLaunch, [switch]$NoPath)
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $here = $PSScriptRoot
@@ -31,6 +35,7 @@ New-Item -ItemType Directory -Force $tmp | Out-Null
 try {
     # The core's installer deletes its zip and itself when done: hand it copies.
     Copy-Item (Join-Path $here "core\install.ps1"), (Join-Path $here "core\herdr-core.zip") $tmp
+    if ($NoPath) { $env:HC_NO_PATH = "1" }
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$tmp\install.ps1" "$tmp\herdr-core.zip"
     if ($LASTEXITCODE) { throw "Installing herdr-core failed (exit $LASTEXITCODE)." }
 } finally {
@@ -59,6 +64,9 @@ $link.Description = "Terminals and coding agents that keep running"
 $link.Save()
 
 # 4. PATH, keeping %VARIABLES% in it unexpanded and its registry type as it was.
+if ($NoPath) {
+    Write-Host "Left your PATH alone (-NoPath). The CLI is $dir\zendr.cmd."
+} else {
 $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
 try {
     $raw = [string]$key.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
@@ -70,11 +78,13 @@ try {
         [Environment]::SetEnvironmentVariable("ZENDR_INSTALLING", $null, "User")
     }
 } finally { $key.Close() }
+}
 
 # 5. Zendr's mods, layout and shortcuts.
 & (Join-Path $here "config\install.ps1")
 
 Write-Host ""
-Write-Host "  Zendr is ready. Open it from the Start menu, or type zendr in a new terminal." -ForegroundColor Green
+$ready = if ($NoPath) { "Zendr is ready. Open it from the Start menu." } else { "Zendr is ready. Open it from the Start menu, or type zendr in a new terminal." }
+Write-Host "  $ready" -ForegroundColor Green
 Write-Host ""
 if (-not $NoLaunch) { Start-Process (Join-Path $dir "herdr-app.exe") -WorkingDirectory $env:USERPROFILE }
