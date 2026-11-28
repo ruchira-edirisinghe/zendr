@@ -25,6 +25,9 @@ export function claudeHome(): string;
 /** Claude Code's session-bridge folder: `$CLAUDE_SESSION_BRIDGE_DIR`, else `session-bridge`
  *  in `claudeHome()` (or `~/.claude/session-bridge` while only that one exists). */
 export function sessionBridgeDir(): string;
+/** What the last `remote.pair` returned (the pairing link, its QR code, the addresses) while
+ *  the phone server is on. Settings only; null for every other mod. */
+export function phonePairing(): any;
 /** True while `herdr-app check` loads this mod: `init()` runs for real there
  *  (exec and writeTextFile included), so guard process side effects. */
 export function checking(): boolean;

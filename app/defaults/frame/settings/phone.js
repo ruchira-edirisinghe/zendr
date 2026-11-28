@@ -1,10 +1,10 @@
 // Settings → Phone: pair the Zendr app on a phone with this computer (src/remote.rs).
-// remote.pair turns the phone server on and puts the pairing link and its QR code in shared
-// "remote.pairing"; remote.status puts the switch's state in shared "remote.status".
+// remote.pair turns the phone server on and makes the pairing link and its QR code, which only
+// this mod reads (phonePairing()); remote.status puts the switch's state in shared "remote.status".
 
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, run, shared, window } from "herdr";
+import { exec, run, shared, phonePairing, window } from "herdr";
 
 const I = (name) => `frame/settings/${name}.svg`;
 
@@ -31,7 +31,7 @@ export const phoneMethods = {
 
   phonePage(t) {
     const status = shared("remote.status") ?? {};
-    const pairing = status.enabled ? shared("remote.pairing") : null;
+    const pairing = status.enabled ? phonePairing() : null;
     const ts = pairing?.tailscale ?? {};
     const btn = (id, label, action, primary = false) => div().id(id).h(32).px(14).flex().items_center().rounded(8).cursor_pointer()
       .text_size(13).font_medium().bg(primary ? t.accent : t.raised).text_color(primary ? t.background : t.foreground)
