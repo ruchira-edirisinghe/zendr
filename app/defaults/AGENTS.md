@@ -596,6 +596,7 @@ you use the same list. `herdr-app commands` prints every one with its arguments
 (which are required) and what it does. Unknown argument names are errors and list
 valid names; they never fall back to the current target. For example, closing a
 space uses `herdr-app do space.close --id <id> --confirmed true`, not `--space`.
+`herdr-app do` talks to the open window over herdr-app.sock with the key the window writes to herdr-app.sock.key at each start; a request without it is refused.
 Target IDs (`id`, `pane`, `space`, `terminal`) must be strings. Other non-null
 types are rejected before a current-target default applies; null means omitted.
 The main ones:
