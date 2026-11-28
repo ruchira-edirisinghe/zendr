@@ -440,6 +440,21 @@ flowchart TB
 - **Everything you see is a mod.** The Sessions list, the toolbar, the drawers and the code reviewer are small JavaScript files in `~\.config\herdr-app\mods`. They hot-reload when you edit them, so you can change any of them.
 - **Agents are recognised by the core.** It knows Claude Code, Codex, Gemini, OpenCode, Amp and others, and reports when each one is working, waiting on you or done.
 
+### What a session costs
+
+Measured with `py app/scripts/bench.py --set sessions` on 28 November 2026, release build, Windows 11, Intel Core i7-10700 (8 cores, 16 threads), 32 GB RAM, 165 Hz display. Memory is the working set of Zendr, `herdr-core` and its session holder added together. CPU is the share of one core, averaged over 20 seconds. The shells and agents themselves aren't counted: they cost the same in any terminal.
+
+| Running | Memory | CPU |
+| --- | --- | --- |
+| 1 idle session | 127 MB | 3.1% |
+| 4 idle sessions | 133 MB | 7.2% |
+| 8 idle sessions | 142 MB | 4.3% |
+| 8 idle + 1 working | 151 MB | 14.0% |
+| 8 idle + 4 working | 163 MB | 16.0% |
+| 8 idle + 8 working | 183 MB | 18.6% |
+
+Each idle session (a shell at its prompt) adds about **2 MB and 0.2% CPU**. Each working session (an agent streaming text with a spinner) adds about **5 MB and 0.7% CPU**. Most of the CPU in the working rows goes to drawing the one session on screen, which redraws about 20 times a second. Sessions out of sight cost little. Run the same command to measure your own machine: it writes `sessions.json` with every row.
+
 ## 🔨 Build it yourself
 
 You need:
