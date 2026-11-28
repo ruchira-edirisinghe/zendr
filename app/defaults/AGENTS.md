@@ -733,6 +733,7 @@ The main ones:
   Other unreachable machines don't offer this.
 - Window: `window.minimize`, `window.maximize` (or back), `window.close`.
 - Phone: `remote.pair {lan?, reset?, port?}` (turns the phone server on and returns the pairing link, its QR code and the addresses; `reset` unpairs every phone), `remote.stop`, `remote.status`.
+- Command suggestions: `suggestions.clear` (forgets the command history the grey suggestions at a shell prompt come from; new commands are learned again).
 - macOS: `app.quit`, `app.hide`, `app.hide_others`, `app.show_all`.
 
 When the user runs a command without a required name (a key, a click), Herdr

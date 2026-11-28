@@ -585,6 +585,12 @@ Whether the phone server is on, its port, and whether the local network may reac
 
 No arguments.
 
+## `suggestions.clear`
+
+Forget the command history that command suggestions come from (command-history.json). New commands you run are learned again.
+
+No arguments.
+
 ## `app.settings`
 
 Open the settings (section: look, alerts, updates).
