@@ -208,36 +208,6 @@ fn login_path_answer(out: &str) -> Option<std::ffi::OsString> {
     (!path.is_empty() && path != "$PATH").then(|| path.into())
 }
 
-/// Installs the core's latest release with its own installer (into
-/// ~/.local/bin, or HC_INSTALL_DIR), then finds it. Err: what went wrong.
-pub fn install() -> Result<PathBuf, String> {
-    let releases = std::env::var("HERDR_RELEASES_URL").unwrap_or_else(|_| "https://releases.herdr.dev".into());
-    let mut cmd = if cfg!(windows) {
-        let mut c = crate::spawn::command("powershell");
-        c.args(["-NoProfile", "-Command", &format!("irm {releases}/core/install.ps1 | iex")]);
-        c
-    } else {
-        let mut c = crate::spawn::command("sh");
-        c.args(["-c", &format!("curl -fsSL {releases}/core/install.sh | sh")]);
-        c
-    };
-    let out = cmd.stdin(Stdio::null()).output().map_err(|e| format!("cannot run the installer: {e}"))?;
-    if !out.status.success() {
-        let err = String::from_utf8_lossy(&out.stderr).trim().to_owned();
-        return Err(if err.is_empty() { "the installer failed".into() } else { err });
-    }
-    let home = crate::mods::home();
-    let dir = std::env::var_os("HC_INSTALL_DIR").map(PathBuf::from).unwrap_or_else(|| {
-        if cfg!(windows) {
-            usual_dirs(&home).remove(0)
-        } else {
-            home.join(".local/bin")
-        }
-    });
-    let bin = dir.join(format!("herdr-core{}", std::env::consts::EXE_SUFFIX));
-    version(&bin).map(|_| bin).ok_or_else(|| "installed, but herdr-core doesn't run".into())
-}
-
 /// Updates the core to its latest release (`hc update`: same generation only,
 /// terminals kept). Ok: the version it runs now. Err: what it said, e.g.
 /// "belongs to Homebrew: brew upgrade herdr-core".

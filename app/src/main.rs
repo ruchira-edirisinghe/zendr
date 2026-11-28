@@ -154,7 +154,7 @@ fn main() {
     telemetry::clock();
     // A first start sizes the app to the screen and the system's text size.
     let fresh = !settings::path().exists();
-    // The core people installed; without one, the setup screen installs it.
+    // The core people installed; without one, the setup screen says where to get it.
     let person = settings::load_person();
     let configured = person.as_ref().ok().and_then(|p| p.core.clone());
     let core: Result<std::sync::Arc<hc::Core>, setup::Need> = match core_bin::find(configured.as_deref()) {

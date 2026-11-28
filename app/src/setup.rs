@@ -1,7 +1,7 @@
 //! The frame's core screens, shown instead of the main window until a core
 //! that can serve this app runs:
-//! - none found (core_bin.rs): install it for me (the core's own installer),
-//!   or point at one;
+//! - none found (core_bin.rs): get Zendr's installer (it carries the core),
+//!   look again, or point at one. Nothing is downloaded and piped into a shell;
 //! - too old (or missing a method the app calls): update it (`hc update`,
 //!   terminals kept);
 //! - a newer generation than this app speaks: update the app.
@@ -20,10 +20,8 @@ const ICON: &[u8] = include_bytes!("../assets/icons/herdr-ui-icon-clean.png");
 const APP_INSTALL: &str = "curl -fsSL https://releases.herdr.dev/app/install.sh | sh";
 #[cfg(windows)]
 const APP_INSTALL: &str = "powershell -c \"irm https://releases.herdr.dev/app/install.ps1 | iex\"";
-#[cfg(not(windows))]
-const CORE_INSTALL: &str = "curl -fsSL https://releases.herdr.dev/core/install.sh | sh";
-#[cfg(windows)]
-const CORE_INSTALL: &str = "powershell -c \"irm https://releases.herdr.dev/core/install.ps1 | iex\"";
+/// Zendr's releases: each package carries herdr-core and installs both.
+const DOWNLOADS: &str = "https://github.com/ruchira-edirisinghe/zendr/releases/latest";
 const CORE_PLACE: &str = if cfg!(windows) { r"%LOCALAPPDATA%\Programs\herdr-core" } else { "~/.local/bin" };
 
 /// What's missing before the main window can open.
@@ -133,8 +131,18 @@ impl Setup {
         .detach();
     }
 
-    fn install(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.run("Installing herdr-core…", || crate::core_bin::install().map(Some), window, cx);
+    fn download(&mut self, cx: &mut Context<Self>) {
+        cx.open_url(DOWNLOADS);
+    }
+
+    /// After installing: finds the core again (it wasn't there when Zendr started).
+    fn look_again(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.run("Looking for herdr-core…", || {
+            let configured = settings::load_person().ok().and_then(|p| p.core);
+            crate::core_bin::find(configured.as_deref())
+                .map(Some)
+                .ok_or_else(|| "Zendr still can't find herdr-core. Run Zendr's installer, or point at it with I have it somewhere…".into())
+        }, window, cx);
     }
 
     fn update(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -169,7 +177,7 @@ impl Setup {
             Need::Install => (
                 "Zendr needs herdr-core".into(),
                 "herdr-core runs your terminals and agents, and keeps them alive when this window closes. Zendr couldn't find it on this computer.".into(),
-                format!("Install it for me puts it in {CORE_PLACE} (with hc), like its own installer: {CORE_INSTALL}"),
+                format!("Zendr's installer puts it in {CORE_PLACE} (with hc). Run it, then look again: {DOWNLOADS}"),
             ),
             Need::Connect(error) => (
                 "Zendr can't connect to herdr-core".into(),
@@ -219,7 +227,8 @@ impl Render for Setup {
             Need::Install => div()
                 .flex()
                 .gap(px(10.0))
-                .child(button("install", "Install it for me", true).when(!busy, |d| d.on_click(cx.listener(|this, _, w, cx| this.install(w, cx)))))
+                .child(button("download", "Get Zendr's installer", true).when(!busy, |d| d.on_click(cx.listener(|this, _, _, cx| this.download(cx)))))
+                .child(button("look", "Look again", false).when(!busy, |d| d.on_click(cx.listener(|this, _, w, cx| this.look_again(w, cx)))))
                 .child(button("choose", "I have it somewhere…", false).when(!busy, |d| d.on_click(cx.listener(|this, _, w, cx| this.choose(w, cx))))),
             Need::Connect(_) => div().child(button("retry", "Retry", true).on_click(cx.listener(|this, _, w, cx| this.start(w, cx)))),
             Need::Fix(Mismatch::Newer { .. }) => div()
