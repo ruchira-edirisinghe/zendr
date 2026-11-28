@@ -2,13 +2,14 @@
 // messages between them (Claude Code's session-bridge mod), and a box to message any of
 // them as you. A right-side panel of the main-review layout.
 //
-// Sessions find each other through ~/.claude/session-bridge (see the session-bridge
+// Sessions find each other through the session-bridge folder (`sessionBridgeDir()`:
+// $CLAUDE_SESSION_BRIDGE_DIR, else session-bridge in $CLAUDE_CONFIG_DIR or ~/.claude; see the session-bridge
 // README): sessions/<id>.json per live session, inbox/<name>/<id>.json for messages,
 // events/<id>.json per sent message. The hub reads those, and sends by writing a message
 // into a session's inbox, which its bridge picks up within 2 seconds.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { agents, terminals, spaces, focused, run, home, exec, readTextFile, writeTextFile, theme, shared, window, openOverlay } from "herdr";
+import { agents, terminals, spaces, focused, run, home, sessionBridgeDir, exec, readTextFile, writeTextFile, theme, shared, window, openOverlay } from "herdr";
 
 // Who the hub sends as: the person at the keyboard.
 const ME = { id: "hub", name: "ruchira", role: "human" };
@@ -34,7 +35,7 @@ function sessionColor(address, space) {
 }
 
 const slash = (p) => (p ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
-const root = () => `${slash(home())}/.claude/session-bridge`;
+const root = () => slash(sessionBridgeDir());
 const windows = () => window()?.platform === "windows";
 const newId = () => `${Date.now()}-${Math.floor(Math.random() * 36 ** 6).toString(36).padStart(6, "0")}`;
 const isCoordinator = (p) => p?.role === COORDINATOR || p?.name === COORDINATOR;
