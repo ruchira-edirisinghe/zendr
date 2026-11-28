@@ -34,21 +34,41 @@ impl Grant {
     }
 }
 
-/// The add-on a mod came from, if it came from one.
+fn read_json(p: PathBuf) -> Value {
+    std::fs::read_to_string(p).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or(Value::Null)
+}
+
+fn catalog() -> Value {
+    read_json(crate::mods::app_dir().join("addons").join("catalog.json"))
+}
+
+/// The add-on a mod came from, if it came from one: its folder's marker, or the catalog
+/// naming it (so an add-on that deletes its marker is still one).
 pub fn addon_of(mod_name: &str) -> Option<String> {
     if mod_name.is_empty() || mod_name.contains(['/', '\\']) || mod_name.starts_with('.') {
         return None;
     }
     let marker = crate::mods::app_dir().join("mods").join(mod_name).join(".zendr-addon");
-    std::fs::read_to_string(marker).ok().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty())
+    let marked = std::fs::read_to_string(marker).ok().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty());
+    marked.or_else(|| listed_in(&catalog(), mod_name))
+}
+
+fn listed_in(catalog: &Value, mod_name: &str) -> Option<String> {
+    catalog["addons"].as_array()?.iter()
+        .find(|a| a["mods"].as_array().is_some_and(|m| m.iter().any(|m| m.as_str() == Some(mod_name))))
+        .and_then(|a| a["id"].as_str().map(str::to_owned))
 }
 
 /// None: not an add-on, so it may do everything.
 pub fn for_mod(mod_name: &str) -> Option<Grant> {
     let id = addon_of(mod_name)?;
-    let app = crate::mods::app_dir();
-    let read = |p: PathBuf| std::fs::read_to_string(p).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or(Value::Null);
-    Some(resolve(&id, &read(app.join("addons").join("catalog.json")), &read(crate::settings::path())))
+    Some(resolve(&id, &catalog(), &read_json(crate::settings::path())))
+}
+
+/// Where no add-on writes, whatever it was given: the mods themselves, the add-ons and their
+/// catalog, and settings.json (which holds what each add-on may do).
+pub fn never_written(app: &Path) -> Vec<PathBuf> {
+    vec![app.join("mods"), app.join("addons"), app.join("settings.json"), app.join("keys.json")]
 }
 
 fn resolve(id: &str, catalog: &Value, settings: &Value) -> Grant {
@@ -100,6 +120,13 @@ mod tests {
         assert_eq!(resolve("none", &catalog, &json!({})), Grant::default());
         assert_eq!(resolve("old", &catalog, &json!({})), Grant::ALL);
         assert_eq!(resolve("gone", &catalog, &json!({})), Grant::default());
+    }
+
+    #[test]
+    fn the_catalog_says_which_mods_are_addons() {
+        let catalog = json!({ "addons": [{ "id": "pack", "mods": ["pack-a", "pack-b"] }] });
+        assert_eq!(listed_in(&catalog, "pack-b").as_deref(), Some("pack"));
+        assert_eq!(listed_in(&catalog, "hub"), None);
     }
 
     /// scripts/addon_permissions.py writes these from each add-on's code; --check keeps them true.

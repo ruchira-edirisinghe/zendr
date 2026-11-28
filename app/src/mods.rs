@@ -1223,6 +1223,8 @@ struct Guard {
     reads: Vec<PathBuf>,
     /// Where it may write without `write`: its data folder.
     writes: Vec<PathBuf>,
+    /// An add-on: where it never writes (mods, add-ons, settings.json).
+    addon: Option<Vec<PathBuf>>,
 }
 
 impl Guard {
@@ -1231,8 +1233,20 @@ impl Guard {
         let app = app_dir();
         let data = app.join("data").join(name);
         let mut reads = vec![app.join("mods").join(name), data.clone()];
-        reads.extend(crate::addon_grants::addon_of(name).map(|id| app.join("addons").join(id)));
-        Self { name: name.to_owned(), grant, reads, writes: vec![data] }
+        let addon = crate::addon_grants::addon_of(name);
+        reads.extend(addon.as_ref().map(|id| app.join("addons").join(id)));
+        let never = addon.map(|_| crate::addon_grants::never_written(&app));
+        Self { name: name.to_owned(), grant, reads, writes: vec![data], addon: never }
+    }
+
+    /// An add-on writes only by a full path, never where its permissions are kept, and
+    /// outside its data folder only with `write`.
+    fn may_write(&self, path: &str) -> bool {
+        let Some(never) = &self.addon else { return true };
+        let inside = |roots: &[PathBuf]| crate::addon_grants::inside(path, roots);
+        let p = Path::new(path);
+        let clean = p.is_absolute() && !p.components().any(|c| matches!(c, std::path::Component::ParentDir));
+        clean && !inside(never) && (self.grant.write || inside(&self.writes))
     }
 
     fn allow(&self, ok: bool, what: &str) -> Result<(), HostError> {
@@ -1285,7 +1299,7 @@ fn module(inst: Instance, copy: u64) -> HostModule {
         .async_function("writeTextFile", move |a| {
             let expected = a.get(2).and_then(|v| match v { HostValue::Str(s) => Some(s.clone()), _ => None });
             let path = a.string(0)?.to_owned();
-            g_write.allow(g_write.grant.write || crate::addon_grants::inside(&path, &g_write.writes), "write files outside its data folder")?;
+            g_write.allow(g_write.may_write(&path), "write there (outside its data folder, or where Zendr keeps what add-ons may do)")?;
             if checking() { tracing::warn!("check: mod wrote `{path}`; the write lands for real"); }
             Ok(crate::mod_files::write_text(path, a.string(1)?.to_owned(), expected))
         })
@@ -1571,7 +1585,8 @@ fn addon_capabilities(name: &str, grant: crate::addon_grants::Grant) -> Capabili
     let read_roots = if grant.read { vec![home()] } else { vec![app.join("mods").join(name), data.clone()] };
     Capabilities::new()
         .read_roots(read_roots)
-        .write_roots(if grant.write { vec![app] } else { vec![data] })
+        // Never the app folder itself: mods, add-ons and settings.json live there.
+        .write_roots(vec![data])
         .execute(if grant.exec { ExecuteGrant::Unrestricted } else { ExecuteGrant::Denied })
         .network(if grant.network { NetworkGrant::Unrestricted } else { NetworkGrant::Denied })
         .storage(true)
