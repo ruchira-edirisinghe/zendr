@@ -41,5 +41,14 @@ object Glyphs {
     val Heart by lazy {
         line("heart", "M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2c-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z")
     }
+    val Unlink by lazy {
+        line(
+            "unlink", "M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71", "M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71",
+            "M8 2v3", "M2 8h3", "M16 22v-3", "M22 16h-3",
+        )
+    }
+    val Up by lazy { line("up", "M12 19V5", "M5 12l7-7l7 7") }
+    val Bang by lazy { line("bang", "M12 6v8", "M12 18h.01") }
+    val Cross by lazy { line("cross", "M6 6l12 12", "M18 6L6 18") }
     val Open by lazy { line("open", "M15 3h6v6", "M10 14L21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6") }
 }
