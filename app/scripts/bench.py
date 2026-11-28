@@ -300,6 +300,14 @@ def measure(name, app, seconds, sample):
         row["app_system_ms"] = round((app_ru[1]["system_ns"] - app_ru[0]["system_ns"]) / took / 1e6, 1)
     row.update(frames_since(offset))
     row["app_mb"] = rss_mb(app)
+    # Memory of Zendr's own processes (not the programs in the terminals): working set on
+    # Windows, RSS elsewhere.
+    core_and_holders = [rss_mb(p) for p in procs["core"] + procs["holder"]]
+    row["core_mb"] = rss_mb(core) if core else None
+    row["holder_mb"] = sum(m for m in core_and_holders[len(procs["core"]):] if m)
+    row["holders"] = len(procs["holder"])
+    row["total_mb"] = sum(m for m in [row["app_mb"], row["core_mb"], row["holder_mb"]] if m)
+    row["total_cpu"] = round(row["app_cpu"] + row["core_cpu"] + row["holder_cpu"], 1)
     if sys.platform == "darwin":  # CPU per thread (ps -M), to see which thread costs
         out = subprocess.run(["ps", "-M", "-p", str(app)], capture_output=True, text=True).stdout
         with open(f"{ROOT}/threads-{name}.txt", "w") as f:
@@ -316,7 +324,17 @@ def measure(name, app, seconds, sample):
           f"mods: js {row['scripts']:4.1f}/s {row['script_ms']:5.1f} ms/s, native {row['materialize']:4.1f}/s {row['materialize_ms']:5.1f} ms/s  "
           f"{row['app_mb']} MB",
           flush=True)
+    print(f"{name:16} memory app {row['app_mb']} MB  core {row['core_mb']} MB  holders {row['holder_mb']} MB ({row['holders']})  "
+          f"total {row['total_mb']} MB, CPU {row['total_cpu']}%", flush=True)
     return row
+
+
+def per_session(rows, first, last):
+    """MB and CPU % each session adds, between two measured rows (n = sessions in each)."""
+    a, b = rows[first], rows[last]
+    n = b["sessions"] - a["sessions"]
+    return {"from": a["scenario"], "to": b["scenario"],
+            "mb": round((b["total_mb"] - a["total_mb"]) / n, 1), "cpu": round((b["total_cpu"] - a["total_cpu"]) / n, 2)}
 
 
 def main():
@@ -325,9 +343,11 @@ def main():
     ap.add_argument("--seconds", type=int, default=20)
     ap.add_argument("--sample", action="store_true")
     ap.add_argument("--zoom", type=float, default=1.0)
-    ap.add_argument("--set", choices=["all", "spinners", "titles"], default="all",
+    ap.add_argument("--set", choices=["all", "spinners", "titles", "sessions"], default="all",
                     help="spinners: many spaces of idle agents, one agent working on screen; "
-                    "titles: eight agents whose titles spin after a prefix")
+                    "titles: eight agents whose titles spin after a prefix; "
+                    "sessions: RAM and CPU as sessions are added (1, 4, 8 idle, then 1, 4, 8 working), "
+                    "and what each one adds (sessions.json)")
     ap.add_argument("--only", help="measure only this scenario, e.g. spinners+stream")
     a = ap.parse_args()
     if a.seconds <= 0:
@@ -392,6 +412,35 @@ def main():
             rows.append(measure("spinners+stream", app.pid, a.seconds, a.sample))
             do(bin, "tab.new", {"name": "title", "argv": reports("title")})
             rows.append(measure("spinners+title", app.pid, a.seconds, a.sample))
+            return
+        if a.set == "sessions":
+            # Idle sessions: a shell at its prompt each. Then sessions working like an agent
+            # (text streaming, a spinner), the first of them on screen.
+            do(bin, "space.new", {"name": "bench", "folder": ROOT, "argv": reports("idle")})
+            count = 1
+            for target in (1, 4, 8):
+                while count < target:
+                    do(bin, "tab.new", {"argv": reports("idle")})
+                    count += 1
+                rows.append(dict(measure(f"idle-{target}", app.pid, a.seconds, a.sample), sessions=count))
+            working = 0
+            for target in (1, 4, 8):
+                while working < target:
+                    do(bin, "tab.new", {"name": f"work{working}", "argv": agent})
+                    working += 1
+                    if working == 1:
+                        do(bin, "tab.select", {"index": count + 1})
+                rows.append(dict(measure(f"idle-8+working-{target}", app.pid, a.seconds, a.sample), sessions=count + working))
+            summary = {
+                "idle_session": per_session(rows, 0, 2),
+                "working_session": per_session(rows, 3, 5),
+                "rows": [{k: r.get(k) for k in ("scenario", "sessions", "app_mb", "core_mb", "holder_mb", "total_mb", "app_cpu", "core_cpu", "holder_cpu", "total_cpu")} for r in rows],
+                "platform": sys.platform,
+            }
+            with open(f"{ROOT}/sessions.json", "w") as f:
+                json.dump(summary, f, indent=1)
+            print(f"each idle session:    +{summary['idle_session']['mb']} MB, +{summary['idle_session']['cpu']}% CPU", flush=True)
+            print(f"each working session: +{summary['working_session']['mb']} MB, +{summary['working_session']['cpu']}% CPU", flush=True)
             return
         if a.set == "titles":
             do(bin, "space.new", {"name": "bench", "folder": ROOT, "argv": reports("prefixed")})
