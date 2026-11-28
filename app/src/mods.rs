@@ -1265,6 +1265,8 @@ fn module(inst: Instance, copy: u64) -> HostModule {
     });
     let props = inst.props.clone();
     let feedback_frame = inst.name == "frame-feedback";
+    // Settings → Phone, the one mod that pairs phones: the pairing link holds the token.
+    let settings_frame = inst.name == "frame-settings";
     let feedback_from = inst.props.get("from").and_then(Value::as_str).unwrap_or("person").to_owned();
     let feedback_layout = inst.props.get("layout").and_then(Value::as_str).unwrap_or("other").to_owned();
     // An add-on gets only what it declared and the person allowed (addon_grants.rs).
@@ -1313,6 +1315,7 @@ fn module(inst: Instance, copy: u64) -> HostModule {
         .function("appHome", |_| Ok(app_dir().to_string_lossy().into_owned().into()))
         .function("claudeHome", |_| Ok(claude_home().to_string_lossy().into_owned().into()))
         .function("sessionBridgeDir", |_| Ok(session_bridge_dir().to_string_lossy().into_owned().into()))
+        .function("phonePairing", move |_| Ok(if settings_frame { to_host(&crate::remote::pairing()) } else { HostValue::Null }))
         .function("fonts", |_| Ok(to_host(&json!(*FONTS.lock().unwrap()))))
         .function("updates", |_| Ok(to_host(&crate::update::status())))
         .function("presentUpdateNotes", |a| {
@@ -1419,6 +1422,9 @@ fn module(inst: Instance, copy: u64) -> HostModule {
             let args = a.get(1).map(from_host).unwrap_or(Value::Null);
             // Commands that start a program run it as surely as exec does.
             g_run.allow(g_run.grant.exec || args.get("argv").is_none_or(Value::is_null), "start programs")?;
+            if name == "remote.pair" && !settings_frame {
+                return Err(HostError::new("remote.pair is only for Settings → Phone: it shows the pairing code"));
+            }
             if let Some(command) = crate::commands::find(&name) {
                 crate::commands::validate_args(command, &args).map_err(HostError::new)?;
             }
