@@ -11,9 +11,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,63 +20,58 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.delay
@@ -89,7 +81,13 @@ sealed class Screen {
     data object Home : Screen()
     data object Pair : Screen()
     data class Sessions(val computer: String) : Screen()
-    data class Terminal(val computer: String, val terminal: String, val title: String) : Screen()
+    data class Terminal(
+        val computer: String,
+        val terminal: String,
+        val title: String,
+        val app: String? = null,
+        val status: String? = null,
+    ) : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -99,6 +97,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // One computer paired: straight to its sessions (back still shows the computers).
+        if (savedInstanceState == null) {
+            Store(this).computers().singleOrNull()?.let { screen = Screen.Sessions(it.id) }
+        }
         handle(intent)
         setContent { ZendrTheme { App() } }
     }
@@ -114,7 +116,9 @@ class MainActivity : ComponentActivity() {
         intent.data?.toString()?.takeIf { it.startsWith("zendr://") }?.let { pendingLink = it; screen = Screen.Pair }
         val c = intent.getStringExtra(EXTRA_COMPUTER)
         val t = intent.getStringExtra(EXTRA_TERMINAL)
-        if (c != null && t != null) screen = Screen.Terminal(c, t, "Session")
+        if (c != null && t != null) {
+            screen = Screen.Terminal(c, t, intent.getStringExtra(EXTRA_TITLE) ?: "Session", intent.getStringExtra(EXTRA_APP), intent.getStringExtra(EXTRA_STATUS))
+        }
     }
 
     @Composable
@@ -128,7 +132,9 @@ class MainActivity : ComponentActivity() {
             }
             is Screen.Sessions -> {
                 BackHandler { screen = Screen.Home }
-                SessionsScreen(store, s.computer, onBack = { screen = Screen.Home }, onOpen = { screen = Screen.Terminal(s.computer, it.terminal, it.title) })
+                SessionsScreen(store, s.computer, onBack = { screen = Screen.Home }, onOpen = {
+                    screen = Screen.Terminal(s.computer, it.terminal, it.title, it.app, it.status)
+                })
             }
             is Screen.Terminal -> {
                 BackHandler { screen = Screen.Sessions(s.computer) }
@@ -140,42 +146,22 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_COMPUTER = "computer"
         const val EXTRA_TERMINAL = "terminal"
+        const val EXTRA_TITLE = "title"
+        const val EXTRA_APP = "app"
+        const val EXTRA_STATUS = "status"
     }
 }
 
-private val Green = Color(0xFF2FBF71)
-private val Red = Color(0xFFE5534B)
-private val Amber = Color(0xFFE0A030)
-
-@Composable
-fun ZendrTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    val scheme = if (dark) {
-        darkColorScheme(
-            primary = Green, onPrimary = Color(0xFF06210F), background = Color(0xFF15171A), surface = Color(0xFF15171A),
-            surfaceVariant = Color(0xFF22252A), onSurfaceVariant = Color(0xFFB7BCC4),
-        )
-    } else {
-        lightColorScheme(primary = Color(0xFF1E8A50), onPrimary = Color.White, surfaceVariant = Color(0xFFEDEFF2))
-    }
-    MaterialTheme(colorScheme = scheme) { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() } }
-}
-
-@Composable
-fun StatusChip(status: String?) {
-    val color = when (status) {
-        "blocked" -> Red
-        "working" -> Amber
-        "done" -> Green
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    Row(
-        Modifier.background(color.copy(alpha = 0.16f), RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(7.dp).background(color, CircleShape))
-        Spacer(Modifier.width(6.dp))
-        Text(statusLabel(status), color = color, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+/** A line about a computer's sessions: who needs you first. */
+private fun summarize(spaces: List<Space>): String {
+    val sessions = spaces.flatMap { it.sessions }
+    val need = sessions.count { it.status == "blocked" }
+    val busy = sessions.count { it.status == "working" }
+    return when {
+        need > 0 -> "$need need${if (need == 1) "s" else ""} you" + if (busy > 0) " · $busy working" else ""
+        busy > 0 -> "$busy working"
+        sessions.isEmpty() -> "Nothing running"
+        else -> "${sessions.size} session${if (sessions.size == 1) "" else "s"}, all quiet"
     }
 }
 
@@ -186,26 +172,20 @@ fun StatusChip(status: String?) {
 fun HomeScreen(store: Store, onOpen: (Computer) -> Unit, onAdd: () -> Unit) {
     val context = LocalContext.current
     var computers by remember { mutableStateOf(store.computers()) }
-    var summary by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var summary by remember { mutableStateOf<Map<String, Pair<String, Boolean>>>(emptyMap()) }
     var alerts by remember { mutableStateOf(store.alerts) }
     var forget by remember { mutableStateOf<Computer?>(null) }
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     LaunchedEffect(computers) {
-        while (true) {
-            summary = computers.associate { c ->
-                c.id to runCatching {
-                    val sessions = Api.state(store, c).flatMap { it.sessions }
-                    val need = sessions.count { it.status == "blocked" }
-                    val busy = sessions.count { it.status == "working" }
-                    when {
-                        need > 0 -> "$need need${if (need == 1) "s" else ""} you"
-                        busy > 0 -> "$busy working"
-                        else -> "${sessions.size} session${if (sessions.size == 1) "" else "s"}, all quiet"
-                    }
-                }.getOrElse { "Offline: ${it.message}" }
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                summary = computers.associate { c ->
+                    c.id to runCatching { summarize(Api.state(store, c)) to true }.getOrElse { "Offline: ${it.message}" to false }
+                }
+                delay(5000)
             }
-            delay(5000)
         }
     }
 
@@ -217,13 +197,16 @@ fun HomeScreen(store: Store, onOpen: (Computer) -> Unit, onAdd: () -> Unit) {
     ) { pad ->
         LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Notifications, null, tint = if (alerts) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Alert me", fontWeight = FontWeight.Medium)
+                            Text("Alert me", fontWeight = FontWeight.Medium, fontSize = 16.sp)
                             Text("A notification when an agent needs you or finishes, even with the app closed.",
                                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        Spacer(Modifier.width(8.dp))
                         Switch(checked = alerts, onCheckedChange = { on ->
                             alerts = on
                             store.alerts = on
@@ -239,35 +222,40 @@ fun HomeScreen(store: Store, onOpen: (Computer) -> Unit, onAdd: () -> Unit) {
             }
             if (computers.isEmpty()) {
                 item {
-                    Column(Modifier.fillMaxWidth().padding(top = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No computers yet", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(8.dp))
+                    Column(Modifier.fillMaxWidth().padding(top = 40.dp, start = 8.dp, end = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("No computers yet", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(10.dp))
                         Text(
-                            "On your computer, open Zendr, then Settings → Phone, and scan the code it shows with Add computer.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp,
+                            "On your computer, open Zendr, then Settings → Phone → Show pairing code. Then tap Add computer here and scan it.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp,
                         )
                     }
                 }
+            } else {
+                item { Text("Your computers", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, start = 4.dp)) }
             }
             items(computers, key = { it.id }) { c ->
-                Card(
-                    Modifier.fillMaxWidth().clickable { onOpen(c) },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                ) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Home, null, tint = MaterialTheme.colorScheme.primary)
+                val (line, online) = summary[c.id] ?: ("Checking…" to true)
+                Surface(onClick = { onOpen(c) }, shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            Text("💻", fontSize = 22.sp)
+                            Box(
+                                Modifier.align(Alignment.BottomEnd).padding(2.dp).size(10.dp)
+                                    .background(if (online) Green else MaterialTheme.colorScheme.onSurfaceVariant, CircleShape),
+                            )
+                        }
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(c.name, fontWeight = FontWeight.Medium, fontSize = 16.sp)
-                            val line = summary[c.id] ?: "Checking…"
-                            Text(line, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            Text(c.name, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(line, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                                 color = if (line.contains("need")) Red else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick = { forget = c }) { Icon(Icons.Default.Delete, "Forget ${c.name}") }
+                        IconButton(onClick = { forget = c }) { Icon(Icons.Default.Delete, "Forget ${c.name}", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }
-            item { Spacer(Modifier.height(72.dp)) }
+            item { Spacer(Modifier.height(80.dp)) }
         }
     }
 
@@ -322,18 +310,22 @@ fun PairScreen(store: Store, link: String?, onDone: (Computer?) -> Unit) {
             navigationIcon = { IconButton(onClick = { onDone(null) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
         )
     }) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad).padding(20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.fillMaxSize().padding(pad).padding(20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Step(1, "On the computer, install Tailscale and sign in. Do the same on this phone, with the same account.")
             Step(2, "In Zendr on the computer, open Settings → Phone and click Show pairing code.")
-            Step(3, "Scan the code below. The 6-letter code under it should match the one on the computer.")
+            Step(3, "Scan the code. The 6-letter code under it should match the one on the computer.")
             Button(
                 onClick = { scan.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("Scan the code in Zendr → Settings → Phone").setBeepEnabled(false).setOrientationLocked(false)) },
-                enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp),
-            ) { Text(if (busy) "Connecting…" else "Scan the code") }
+                enabled = !busy, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp),
+            ) { Text(if (busy) "Connecting…" else "Scan the code", fontSize = 16.sp) }
+            error?.let {
+                Surface(color = Red.copy(alpha = 0.12f), shape = RoundedCornerShape(12.dp)) {
+                    Text(it, color = Red, fontSize = 14.sp, modifier = Modifier.padding(12.dp))
+                }
+            }
             Text("Or paste the pairing link (Copy link, on the computer):", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("zendr://pair?…") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-            OutlinedButton(onClick = { pair(text) }, enabled = !busy && text.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Pair") }
-            error?.let { Text(it, color = Red, fontSize = 14.sp) }
+            OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("zendr://pair?…") }, modifier = Modifier.fillMaxWidth(), minLines = 2, shape = RoundedCornerShape(12.dp))
+            OutlinedButton(onClick = { pair(text) }, enabled = !busy && text.isNotBlank(), modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp)) { Text("Pair") }
         }
     }
 }
@@ -341,155 +333,161 @@ fun PairScreen(store: Store, link: String?, onDone: (Computer?) -> Unit) {
 @Composable
 private fun Step(n: Int, text: String) {
     Row(verticalAlignment = Alignment.Top) {
-        Box(Modifier.size(26.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), CircleShape), contentAlignment = Alignment.Center) {
-            Text("$n", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Box(Modifier.size(28.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), CircleShape), contentAlignment = Alignment.Center) {
+            Text("$n", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
         Spacer(Modifier.width(12.dp))
-        Text(text, fontSize = 15.sp, modifier = Modifier.padding(top = 3.dp))
+        Text(text, fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(top = 3.dp))
     }
 }
 
 // ---------------------------------------------------------------- Sessions on one computer
 
+private enum class Filter(val label: String) { All("All"), Need("Needs you"), Working("Working"), Done("Done") }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onOpen: (Session) -> Unit) {
+    val scope = rememberCoroutineScope()
     val computer = store.computers().firstOrNull { it.id == computerId }
     var spaces by remember { mutableStateOf<List<Space>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
+    var filter by remember { mutableStateOf(Filter.All) }
+    var tick by remember { mutableIntStateOf(0) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
 
-    LaunchedEffect(computerId) {
-        while (computer != null) {
-            runCatching { Api.state(store, store.computers().first { it.id == computerId }) }
-                .onSuccess { spaces = it; error = null }
-                .onFailure { error = it.message }
-            delay(3000)
+    suspend fun load() {
+        val c = store.computers().firstOrNull { it.id == computerId } ?: return
+        runCatching { Api.state(store, c) }
+            .onSuccess { spaces = it; error = null }
+            .onFailure { error = it.message }
+    }
+
+    LaunchedEffect(computerId, tick) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (computer != null) {
+                load()
+                delay(2500)
+            }
         }
+    }
+
+    val all = spaces?.flatMap { it.sessions }.orEmpty()
+    val counts = mapOf(
+        Filter.All to all.size,
+        Filter.Need to all.count { it.status == "blocked" },
+        Filter.Working to all.count { it.status == "working" },
+        Filter.Done to all.count { it.status == "done" },
+    )
+    fun keep(s: Session) = when (filter) {
+        Filter.All -> true
+        Filter.Need -> s.status == "blocked"
+        Filter.Working -> s.status == "working"
+        Filter.Done -> s.status == "done"
     }
 
     Scaffold(topBar = {
         TopAppBar(
-            title = { Text(computer?.name ?: "Computer") },
+            title = {
+                Column {
+                    Text(computer?.name ?: "Computer", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    spaces?.let { Text(summarize(it), fontSize = 12.sp, color = if ((counts[Filter.Need] ?: 0) > 0) Red else MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+            },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
         )
     }) { pad ->
-        LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            error?.let { item { Text(it, color = Red, fontSize = 14.sp) } }
-            if (spaces == null && error == null) item { Text("Connecting…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            spaces?.let { list ->
-                // Whoever needs you first, then the rest by space.
-                val waiting = list.flatMap { it.sessions }.filter { it.status == "blocked" }
-                if (waiting.isNotEmpty()) {
-                    item { Header("Needs you") }
-                    items(waiting, key = { "w-" + it.terminal }) { SessionRow(it) { onOpen(it) } }
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = { scope.launch { refreshing = true; load(); refreshing = false } },
+            modifier = Modifier.fillMaxSize().padding(pad),
+        ) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (all.isNotEmpty()) {
+                    item {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
+                            items(Filter.entries.filter { it == Filter.All || (counts[it] ?: 0) > 0 }) { f ->
+                                FilterChip(selected = filter == f, onClick = { filter = f }, label = { Text("${f.label} ${counts[f] ?: 0}") })
+                            }
+                        }
+                    }
                 }
-                list.filter { it.sessions.isNotEmpty() }.forEach { space ->
-                    item(key = "h-" + space.id) { Header(space.name) }
-                    items(space.sessions, key = { space.id + it.terminal }) { SessionRow(it) { onOpen(it) } }
+                error?.let { e ->
+                    item {
+                        Surface(color = Red.copy(alpha = 0.12f), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(14.dp)) {
+                                Text("Can't reach ${computer?.name ?: "it"}", color = Red, fontWeight = FontWeight.SemiBold)
+                                Text(e, color = Red, fontSize = 13.sp)
+                                TextButton(onClick = { tick++ }) { Text("Try again") }
+                            }
+                        }
+                    }
                 }
-                if (list.all { it.sessions.isEmpty() }) item { Text("Nothing running there right now.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                if (spaces == null && error == null) item { Text("Connecting…", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp)) }
+                spaces?.let { list ->
+                    // Whoever needs you first, then the rest by space.
+                    val waiting = all.filter { it.status == "blocked" }
+                    if (waiting.isNotEmpty() && filter == Filter.All) {
+                        item { SectionHeader("Needs you", color = Red) }
+                        items(waiting, key = { "w-" + it.terminal }) { SessionRow(it, onOpen) }
+                    }
+                    list.forEach { space ->
+                        val shown = space.sessions.filter(::keep)
+                        if (shown.isEmpty()) return@forEach
+                        item(key = "h-" + space.id) { SpaceHeader(space.name, shown.size) }
+                        items(shown, key = { space.id + it.terminal }) { SessionRow(it, onOpen) }
+                    }
+                    if (all.isEmpty()) {
+                        item {
+                            Column(Modifier.fillMaxWidth().padding(top = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Nothing running there right now", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                                Text("Start an agent in Zendr on the computer and it shows up here.", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun Header(text: String) {
-    Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp))
+private fun SectionHeader(text: String, color: androidx.compose.ui.graphics.Color) {
+    Text(text, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = color, modifier = Modifier.padding(top = 12.dp, start = 4.dp, bottom = 2.dp))
 }
 
 @Composable
-private fun SessionRow(s: Session, onClick: () -> Unit) {
-    Card(
-        Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+private fun SpaceHeader(name: String, count: Int) {
+    Row(Modifier.padding(top = 14.dp, start = 4.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        SpaceAvatar(name)
+        Spacer(Modifier.width(8.dp))
+        Text(name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.width(6.dp))
+        Text("$count", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SessionRow(s: Session, onOpen: (Session) -> Unit) {
+    val needs = s.status == "blocked"
+    Surface(
+        onClick = { onOpen(s) },
+        shape = RoundedCornerShape(14.dp),
+        color = if (needs) Red.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp),
     ) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            AppBadge(s.app)
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(s.title, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(s.title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(if (s.tab.isNotEmpty() && !s.tab.all(Char::isDigit)) "${s.tab} · ${s.terminal}" else s.terminal,
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            Spacer(Modifier.width(8.dp))
             StatusChip(s.status)
-        }
-    }
-}
-
-// ---------------------------------------------------------------- One terminal: read and answer
-
-private val QUICK_KEYS = listOf("1" to "1", "2" to "2", "3" to "3", "Enter" to "enter", "Esc" to "esc",
-    "↑" to "up", "↓" to "down", "Tab" to "tab", "Ctrl+C" to "ctrl+c")
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TerminalScreen(store: Store, s: Screen.Terminal, onBack: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    val snack = remember { SnackbarHostState() }
-    var screenText by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    var input by remember { mutableStateOf("") }
-    val vScroll = rememberScrollState()
-    val hScroll = rememberScrollState()
-    fun computer() = store.computers().firstOrNull { it.id == s.computer }
-
-    LaunchedEffect(s.terminal) {
-        while (true) {
-            val c = computer() ?: break
-            runCatching { Api.read(store, c, s.terminal) }
-                .onSuccess { if (it != screenText) { screenText = it.trimEnd() } ; error = null }
-                .onFailure { error = it.message }
-            delay(2000)
-        }
-    }
-    LaunchedEffect(screenText) { vScroll.scrollTo(vScroll.maxValue) }
-
-    fun act(block: suspend (Computer) -> Unit) {
-        val c = computer() ?: return
-        scope.launch {
-            runCatching { block(c) }.onFailure { snack.showSnackbar(it.message ?: "That didn't work") }
-            runCatching { screenText = Api.read(store, c, s.terminal).trimEnd() }
-        }
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(s.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                actions = { TextButton(onClick = { act { Api.focus(store, it, s.terminal) } }) { Text("Show on PC") } },
-            )
-        },
-        snackbarHost = { SnackbarHost(snack) },
-    ) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad).imePadding()) {
-            error?.let { Text(it, color = Red, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
-            Box(
-                Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp)
-                    .background(Color(0xFF0E1013), RoundedCornerShape(10.dp))
-                    .verticalScroll(vScroll).horizontalScroll(hScroll).padding(10.dp),
-            ) {
-                Text(screenText.ifEmpty { "…" }, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFFD7DAE0), softWrap = false)
-            }
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                QUICK_KEYS.forEach { (label, key) ->
-                    AssistChip(onClick = { act { Api.keys(store, it, s.terminal, listOf(key)) } }, label = { Text(label) })
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f),
-                    placeholder = { Text("Reply…") }, maxLines = 4,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = {
-                        val t = input.trim(); if (t.isNotEmpty()) { input = ""; act { Api.send(store, it, s.terminal, t) } }
-                    }),
-                )
-                IconButton(onClick = {
-                    val t = input.trim(); if (t.isNotEmpty()) { input = ""; act { Api.send(store, it, s.terminal, t) } }
-                }) { Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = MaterialTheme.colorScheme.primary) }
-            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
