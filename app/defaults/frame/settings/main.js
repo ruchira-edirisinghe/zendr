@@ -76,8 +76,12 @@ const FEATURE_GROUPS = [
 // Settings → Claude mods: Claude Code plugins from the claude-mods marketplace,
 // installed for this user (`claude plugin ...`). [name, title, about]
 const CLAUDE_MARKET = "claude-mods";
-// The Windows and Zendr support is on this branch until it's merged upstream.
-const CLAUDE_MARKET_SOURCE = "https://github.com/ruchira-edirisinghe/claude-mods.git#feat/zendr-windows";
+// The Windows and Zendr support, until it's merged upstream: pinned to a reviewed commit,
+// so a push to the branch can't change what runs in everyone's Claude Code. Moving the
+// pin is a Zendr release.
+const CLAUDE_MARKET_URL = "https://github.com/ruchira-edirisinghe/claude-mods.git";
+const CLAUDE_MARKET_REF = "48c8af7a2593bbeb97c5b0d1f26a80ab88a4f423";
+const CLAUDE_MARKET_SOURCE = `${CLAUDE_MARKET_URL}#${CLAUDE_MARKET_REF}`;
 const DONE_WORDS = { "Turning off…": "Turned off", "Turning on…": "Turned on", "Installing…": "Installed", "Saving options…": "Saved" };
 const CLAUDE_MODS = [
   ["next-steps", "Next steps", "After each reply, suggested next steps as buttons above the prompt. Press 1 to 4 in an empty prompt box, or click one."],
