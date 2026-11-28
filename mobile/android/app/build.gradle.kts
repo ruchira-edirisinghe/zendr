@@ -21,8 +21,8 @@ android {
         applicationId = "dev.zendr.companion"
         minSdk = 26
         targetSdk = 35
-        versionCode = 201
-        versionName = "0.2.1"
+        versionCode = 202
+        versionName = "0.2.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Each on-device test starts the app fresh, in its own process with its data cleared.
         testInstrumentationRunnerArguments["clearPackageData"] = "true"
