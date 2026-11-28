@@ -200,7 +200,7 @@ fn short_code(token: &str) -> String {
     token.chars().take(6).collect::<String>().to_uppercase()
 }
 
-fn token() -> String {
+pub(crate) fn token() -> String {
     let mut bytes = [0u8; 24];
     fill_random(&mut bytes);
     bytes.iter().map(|b| format!("{b:02x}")).collect()
