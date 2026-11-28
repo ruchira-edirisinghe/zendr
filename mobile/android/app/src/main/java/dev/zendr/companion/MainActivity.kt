@@ -151,13 +151,13 @@ class MainActivity : ComponentActivity() {
             }
             is Screen.Sessions -> {
                 BackHandler { screen = Screen.Home }
-                SessionsScreen(store, s.computer, onBack = { screen = Screen.Home }, onAbout = about, onBell = bell, onOpen = {
+                SessionsScreen(store, s.computer, onBack = { screen = Screen.Home }, onAbout = about, onBell = bell, onPair = { screen = Screen.Pair }, onOpen = {
                     screen = Screen.Terminal(s.computer, it.terminal, it.title, it.app, it.status)
                 })
             }
             is Screen.Terminal -> {
                 BackHandler { screen = Screen.Sessions(s.computer) }
-                TerminalScreen(store, s, onBack = { screen = Screen.Sessions(s.computer) })
+                TerminalScreen(store, s, onBack = { screen = Screen.Sessions(s.computer) }, onPair = { screen = Screen.Pair })
             }
             is Screen.About -> {
                 BackHandler { screen = s.from }
@@ -248,7 +248,14 @@ fun HomeScreen(store: Store, onOpen: (Computer) -> Unit, onAdd: () -> Unit, onAb
             while (true) {
                 summary = computers.associate { c ->
                     c.id to runCatching { Api.state(store, c).also { Feed.observe(store, c, it) }.let(::summarize) to true }
-                        .getOrElse { "Offline: ${it.message}" to false }
+                        .getOrElse {
+                            when (it.problem()) {
+                                Problem.Unpaired -> "Unpaired. Scan its code again."
+                                Problem.Outdated -> "Update Zendr there to use this app."
+                                Problem.Offline -> "Not connected. Tap to see why."
+                                else -> "Zendr there ran into a problem."
+                            } to false
+                        }
                 }
                 delay(5000)
             }
@@ -353,6 +360,8 @@ fun PairScreen(store: Store, link: String?, onDone: (Computer?) -> Unit) {
     var text by remember { mutableStateOf(link.orEmpty()) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Couldn't reach the computer: what to check pops up.
+    var help by remember { mutableStateOf<Computer?>(null) }
 
     fun pair(raw: String) {
         val c = Computer.fromLink(raw)
@@ -369,6 +378,7 @@ fun PairScreen(store: Store, link: String?, onDone: (Computer?) -> Unit) {
                 onDone(saved)
             } catch (e: Exception) {
                 error = e.message
+                if (e.problem() == Problem.Offline) help = c
             } finally {
                 busy = false
             }
@@ -402,6 +412,10 @@ fun PairScreen(store: Store, link: String?, onDone: (Computer?) -> Unit) {
             OutlinedButton(onClick = { pair(text) }, enabled = !busy && text.isNotBlank(), modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(16.dp)) { Text("Pair") }
         }
     }
+
+    help?.let { c ->
+        ConnectionHelp(c.name, onRetry = { help = null; pair(text) }, onClose = { help = null })
+    }
 }
 
 @Composable
@@ -421,11 +435,18 @@ private enum class Filter(val label: String) { All("All"), Need("Needs you"), Wo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onAbout: () -> Unit, onBell: () -> Unit, onOpen: (Session) -> Unit) {
+fun SessionsScreen(
+    store: Store, computerId: String, onBack: () -> Unit, onAbout: () -> Unit, onBell: () -> Unit, onPair: () -> Unit, onOpen: (Session) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val computer = store.computers().firstOrNull { it.id == computerId }
     var spaces by remember { mutableStateOf<List<Space>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var problem by remember { mutableStateOf<Problem?>(null) }
+    // Failed looks in a row; the help pops up once per run of them.
+    var misses by remember { mutableIntStateOf(0) }
+    var help by remember { mutableStateOf(false) }
+    var helped by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(Filter.All) }
     var tick by remember { mutableIntStateOf(0) }
@@ -434,8 +455,13 @@ fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onAbout
     suspend fun load() {
         val c = store.computers().firstOrNull { it.id == computerId } ?: return
         runCatching { Api.state(store, c) }
-            .onSuccess { spaces = it; error = null; Feed.observe(store, c, it) }
-            .onFailure { error = it.message }
+            .onSuccess { spaces = it; error = null; problem = null; misses = 0; helped = false; Feed.observe(store, c, it) }
+            .onFailure {
+                error = it.message
+                problem = it.problem()
+                misses++
+                if (problem == Problem.Offline && misses >= HELP_AFTER && !helped) { help = true; helped = true }
+            }
     }
 
     LaunchedEffect(computerId, tick) {
@@ -460,6 +486,9 @@ fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onAbout
         Filter.Working -> s.status == "working"
         Filter.Done -> s.status == "done"
     }
+    val name = computer?.name ?: "the computer"
+    // Nothing to show but the trouble: a screen for it (an offline blip keeps the list, with a note).
+    val shownProblem = if (computer == null) Problem.Missing else problem?.takeIf { spaces == null || it != Problem.Offline }
 
     Scaffold(topBar = {
         ZendrTopBar(
@@ -476,6 +505,15 @@ fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onAbout
             modifier = Modifier.fillMaxSize().padding(pad),
         ) {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                shownProblem?.let { p ->
+                    item {
+                        ProblemView(
+                            p, name, error, Modifier.fillParentMaxSize(),
+                            onRetry = { tick++ }, onHelp = { help = true }, onPair = onPair, onBack = onBack,
+                        )
+                    }
+                    return@LazyColumn
+                }
                 // Which computer, and who needs you there.
                 item {
                     Column(Modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp)) {
@@ -495,13 +533,15 @@ fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onAbout
                         }
                     }
                 }
-                error?.let { e ->
+                if (problem == Problem.Offline) {
                     item {
                         Surface(color = Red.copy(alpha = 0.12f), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(14.dp)) {
-                                Text("Can't reach ${computer?.name ?: "it"}", color = Red, fontWeight = FontWeight.SemiBold)
-                                Text(e, color = Red, fontSize = 13.sp)
-                                TextButton(onClick = { tick++ }) { Text("Try again") }
+                            Row(Modifier.padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Lost the connection", color = Red, fontWeight = FontWeight.SemiBold)
+                                    Text("Trying $name again…", color = Red, fontSize = 13.sp)
+                                }
+                                TextButton(onClick = { help = true }) { Text("What to check") }
                             }
                         }
                     }
@@ -531,6 +571,8 @@ fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onAbout
             }
         }
     }
+
+    if (help) ConnectionHelp(name, onRetry = { help = false; tick++ }, onClose = { help = false })
 }
 
 @Composable
