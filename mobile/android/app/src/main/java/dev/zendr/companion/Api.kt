@@ -114,6 +114,16 @@ class Store(context: Context) {
         get() = prefs.getLong("updateCheckedAt", 0L)
         set(v) = prefs.edit().putLong("updateCheckedAt", v).apply()
 
+    /** The notifications list, newest first (see [Feed]). */
+    var notesJson: String
+        get() = prefs.getString("notes", null) ?: "[]"
+        set(v) = prefs.edit().putString("notes", v).apply()
+
+    /** The newest version already in the notifications list. */
+    var notedVersion: String?
+        get() = prefs.getString("notedVersion", null)
+        set(v) = prefs.edit().putString("notedVersion", v).apply()
+
     /** A version you chose to skip: no popup for it. */
     var skipVersion: String?
         get() = prefs.getString("skipVersion", null)
