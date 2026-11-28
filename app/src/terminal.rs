@@ -145,6 +145,16 @@ struct Grid {
     painted: Vec<(Rc<Vec<vt::Cell>>, Vec<RowOp>, Option<usize>)>,
     /// Font size, cell size, cell font, bold weight, loaded fonts and ligature setting used to draw.
     painted_with: (u32, Size<Pixels>, Font, u16, u64, bool),
+    /// The command line being typed, as the keys sent tell it (`suggest`).
+    line: crate::suggest::Line,
+    /// A shell, not an agent or another program, runs in front (the window says).
+    at_shell: bool,
+    /// The typed line the screen last showed at the cursor: what Enter records.
+    echoed: Option<String>,
+    /// The suggestion drawn after the cursor by the last paint: (for what's typed, the rest).
+    ghost: Option<(String, String)>,
+    /// The last lookup: (what's typed, the command suggested).
+    suggested: Option<(String, Option<String>)>,
 }
 
 pub struct TerminalView {
@@ -343,6 +353,11 @@ impl TerminalView {
                 track: None,
                 painted: Vec::new(),
                 painted_with: (0, Size::default(), font(""), 0, 0, false),
+                line: Default::default(),
+                at_shell: false,
+                echoed: None,
+                ghost: None,
+                suggested: None,
             })),
             focus: cx.focus_handle(),
             was_focused: false,
@@ -398,6 +413,9 @@ impl TerminalView {
             g.told_display = None;
             g.core = core.clone();
             g.channel = None;
+            // Whatever was half typed before is unknown now; the next Enter starts afresh.
+            g.line.lose_track();
+            g.ghost = None;
             if g.attach_ready {
                 None
             } else {
@@ -698,6 +716,7 @@ impl TerminalView {
             Ok(text) => {
                 let bytes = self.grid.borrow().vt.paste_bytes(&text);
                 self.send(&bytes);
+                self.grid.borrow_mut().line.typed(&text);
             }
             Err(body) => drag_paths::unavailable(body),
         }
@@ -802,6 +821,8 @@ impl TerminalView {
         } else if let Some(text) = item.text() {
             let bytes = self.grid.borrow().vt.paste_bytes(&text);
             self.send(&bytes);
+            // One line pasted at a prompt is typed; anything more is lost track of.
+            self.grid.borrow_mut().line.typed(&text);
         } else if item.entries().iter().any(|e| matches!(e, ClipboardEntry::Image(_))) {
             self.paste_image(cx);
         }
@@ -816,6 +837,11 @@ impl TerminalView {
         let bytes = paste_image_fallback(&mut self.grid.borrow_mut().vt, text.as_deref());
         if let Some(bytes) = bytes {
             self.send(&bytes);
+            let mut g = self.grid.borrow_mut();
+            match text.as_deref() {
+                Some(text) => g.line.typed(text),
+                None => g.line.lose_track(),
+            }
         }
     }
 
@@ -1032,11 +1058,67 @@ impl TerminalView {
         if !k.key.starts_with("shift") && !k.key.starts_with("control") && !k.key.starts_with("alt") {
             self.clear_selection(cx);
         }
+        // A suggestion showing after the cursor: Right arrow or Tab types the rest of it.
+        let m = k.modifiers;
+        if matches!(k.key.as_str(), "right" | "tab") && !m.shift && !m.control && !m.alt && !m.platform && !m.function
+            && let Some(rest) = self.suggestion_to_accept()
+        {
+            self.send(rest.as_bytes());
+            let mut g = self.grid.borrow_mut();
+            g.line.typed(&rest);
+            g.ghost = None;
+            drop(g);
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         let bytes = key_bytes(&mut self.grid.borrow_mut().vt, ev);
         if let Some(bytes) = bytes {
             self.send(&bytes);
+            self.follow_line(ev);
             cx.stop_propagation();
         }
+    }
+
+    /// The rest of the suggestion the last paint showed, if it's still for what's typed.
+    fn suggestion_to_accept(&self) -> Option<String> {
+        let g = self.grid.borrow();
+        let (typed, rest) = g.ghost.as_ref()?;
+        (g.line.text() == Some(typed.as_str()) && !rest.is_empty()).then(|| rest.clone())
+    }
+
+    /// Keeps up with the command line a key press changed (`suggest::Line`). Enter
+    /// records the line when the screen showed it as typed.
+    fn follow_line(&self, ev: &KeyDownEvent) {
+        use crate::suggest::KeyEffect;
+        let k = &ev.keystroke;
+        let m = k.modifiers;
+        let mut g = self.grid.borrow_mut();
+        match crate::suggest::key_effect(&k.key, k.key_char.as_deref(), m.control, m.alt || m.function, m.platform) {
+            KeyEffect::Nothing => {}
+            KeyEffect::Text(t) => g.line.typed(&t),
+            KeyEffect::Backspace => g.line.backspace(),
+            KeyEffect::Cancel => g.line.reset(),
+            KeyEffect::Unknown => g.line.lose_track(),
+            KeyEffect::Submit => {
+                if let Some(line) = g.line.text()
+                    && g.at_shell
+                    && !g.vt.alt_screen()
+                    && crate::suggest::enabled()
+                    && g.echoed.as_deref().is_some_and(|e| !e.trim().is_empty() && line.starts_with(e))
+                {
+                    crate::suggest::record(line);
+                }
+                g.line.reset();
+                g.echoed = None;
+            }
+        }
+        g.ghost = None;
+    }
+
+    /// The window tells a terminal whether a shell (not an agent or another program) runs in front.
+    pub fn set_at_shell(&self, at_shell: bool) {
+        self.grid.borrow_mut().at_shell = at_shell;
     }
 
     fn scroll(&mut self, ev: &ScrollWheelEvent, _w: &mut Window, cx: &mut Context<Self>) {
@@ -2312,6 +2394,16 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
 
     paint_images(false, window);
 
+    // A suggestion after the cursor (`suggest`): the rest of a command from the history, in grey.
+    let ghost = command_ghost(grid, &frame, focused && marked.is_none()).and_then(|rest| {
+        let (gx, gy) = frame.cursor_cell?;
+        let line = ghost_line(&rest, cell, frame.rows.get(gy as usize)?.len().saturating_sub(gx as usize), window)?;
+        Some((at(gx as usize, gy as usize), line, rest))
+    });
+    if let Some((p, line, _)) = &ghost {
+        paint_cell_text(line, *p, metrics, window, cx);
+    }
+
     if let Some(cur) = frame.cursor {
         let (x, y) = (cur.x as usize, cur.y as usize);
         let wide = frame.rows.get(y).and_then(|r| r.get(x)).is_some_and(|c| c.wide);
@@ -2331,6 +2423,12 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
                         strikethrough: None,
                     };
                     let line = window.text_system().shape_line(c.text.clone().into(), px(crate::settings::font_size()), &[run], None);
+                    paint_cell_text(&line, p, metrics, window, cx);
+                } else if let Some(first) = ghost.as_ref().filter(|(gp, ..)| *gp == p).and_then(|(.., rest)| rest.chars().next()) {
+                    // The suggestion's first letter under the cursor, as fish shows it.
+                    let text = first.to_string();
+                    let run = TextRun { len: text.len(), font: cell_font(false, false), color: hsla(frame.bg).opacity(0.75), background_color: None, underline: None, strikethrough: None };
+                    let line = window.text_system().shape_line(text.into(), px(crate::settings::font_size()), &[run], None);
                     paint_cell_text(&line, p, metrics, window, cx);
                 }
             }
@@ -2389,6 +2487,65 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
     }
 }
 
+/// The rest of the suggested command for what's typed at a shell prompt, if any (`suggest`).
+/// Notes what the screen shows of the typed line, for Enter to record, and what was suggested,
+/// for Right arrow and Tab to take.
+fn command_ghost(grid: &Rc<RefCell<Grid>>, frame: &vt::Frame, showing: bool) -> Option<String> {
+    let mut g = grid.borrow_mut();
+    g.ghost = None;
+    let typed = g.line.text()?.to_owned();
+    let (cx_, cy_) = frame.cursor_cell?;
+    if !g.at_shell || g.vt.alt_screen() || typed.trim().is_empty() || !crate::suggest::enabled() {
+        return None;
+    }
+    let rows: Vec<Vec<&str>> = frame.rows.iter().map(|r| r.iter().map(|c| c.text.as_str()).collect()).collect();
+    if !crate::suggest::on_screen(&rows, (cx_ as usize, cy_ as usize), &typed) {
+        return None;
+    }
+    g.echoed = Some(typed.clone());
+    if !showing {
+        return None;
+    }
+    let command = match &g.suggested {
+        Some((for_typed, command)) if *for_typed == typed => command.clone(),
+        _ => {
+            let command = crate::suggest::suggest(&typed);
+            g.suggested = Some((typed.clone(), command.clone()));
+            command
+        }
+    }?;
+    let rest = command.strip_prefix(typed.as_str())?.to_owned();
+    g.ghost = Some((typed, rest.clone()));
+    Some(rest)
+}
+
+/// The suggestion shaped onto the grid, one cell a character, cut at the row's end (or a
+/// wide character, which wouldn't line up).
+fn ghost_line(rest: &str, cell: Size<Pixels>, room: usize, window: &mut Window) -> Option<ShapedLine> {
+    let mut text = String::new();
+    let mut positions = Vec::new();
+    for (i, ch) in rest.chars().take(room).enumerate() {
+        if ch.is_control() || crate::suggest::is_wide(ch) {
+            break;
+        }
+        positions.push((text.len(), cell.width * i as f32));
+        text.push(ch);
+    }
+    if text.trim().is_empty() {
+        return None;
+    }
+    let width = cell.width * positions.len() as f32;
+    let run = TextRun {
+        len: text.len(),
+        font: cell_font(false, false),
+        color: hsla(vt::theme().fg).opacity(0.42),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    Some(window.text_system().shape_line(text.into(), px(crate::settings::font_size()), &[run], None).with_cell_positions(&positions, width))
+}
+
 /// OS text input (AltGr, Pinyin, Japanese, Korean, dead keys) types here.
 /// Native composition previews reach this handler; other keys go through
 /// `key_bytes`. The program gets the finished text as it is.
@@ -2422,6 +2579,9 @@ impl EntityInputHandler for TerminalView {
         // input methods type into the program as usual.
         if !self.find_field_focused(window, cx) {
             self.send(text.as_bytes());
+            let mut g = self.grid.borrow_mut();
+            g.line.typed(text);
+            g.ghost = None;
         }
         cx.notify();
     }

@@ -28,6 +28,7 @@ mod process_cwd;
 mod programs;
 mod remote;
 mod remote_shell;
+mod suggest;
 mod settings;
 mod setup;
 mod sound;
@@ -225,6 +226,7 @@ fn main() {
             if let Some(tx) = mods::request_sender() {
                 control::listen(tx);
                 remote::start_saved();
+                suggest::warm();
             }
             match core {
                 Ok(core) => open_main(core, requests, cx),

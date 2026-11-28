@@ -2299,10 +2299,13 @@ impl AppWindow {
     fn tell_term(&self, view: &Entity<TerminalView>, addr: &str, cx: &mut Context<Self>) {
         let cwd = self.cwds.get(addr).map(std::path::PathBuf::from);
         let to_program = self.live.get(addr).and_then(|r| r.pointer("/labels/herdr.right-click")).and_then(Value::as_str) == Some("program");
+        // Command suggestions are for a shell's prompt, not an agent's or another program's.
+        let at_shell = self.live.contains_key(addr) && self.program(addr)["shell"] == true;
         view.update(cx, |v, _| {
             v.cwd = cwd;
             v.link_handlers = self.link_handlers.clone();
             v.right_click_to_program = to_program;
+            v.set_at_shell(at_shell);
         });
     }
 
@@ -3769,6 +3772,10 @@ impl AppWindow {
             "remote.pair" => self.answer(crate::remote::pair(a)),
             "remote.stop" => self.answer(crate::remote::stop()),
             "remote.status" => self.answer(Ok(crate::remote::publish_status())),
+            "suggestions.clear" => {
+                crate::suggest::clear();
+                self.answer(Ok(json!({ "ok": true })));
+            }
             "mod.open" => {
                 let name = Self::arg(a, "name").unwrap_or_default();
                 let Some(f) = self.view_mod(name) else { return self.fail(format!("no mod folder {name:?}")) };

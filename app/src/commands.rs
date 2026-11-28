@@ -101,6 +101,7 @@ pub const COMMANDS: &[Command] = &[
     cmd("remote.pair", &[opt("lan"), opt("reset"), opt("port")], "Let the Zendr phone app reach this computer: turns the phone server on and returns the pairing link, its QR code (rows of 0/1) and the addresses. lan: answer the local network too, not only Tailscale. reset: a new token, which unpairs every phone."),
     cmd("remote.stop", &[], "Turn the phone server off. Paired phones reconnect when it is on again."),
     cmd("remote.status", &[], "Whether the phone server is on, its port, and whether the local network may reach it."),
+    cmd("suggestions.clear", &[], "Forget the command history that command suggestions come from (command-history.json). New commands you run are learned again."),
     cmd("app.settings", &[opt("section")], "Open the settings (section: look, alerts, updates)."),
     cmd("app.check_updates", &[], "Look for a newer Zendr and herdr-core now."),
     cmd("app.update_core", &[], "Update herdr-core to its latest release of this generation; terminals keep running."),
