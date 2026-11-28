@@ -312,7 +312,7 @@ Right-click a session, a tab or a hub card, or press <kbd>Ctrl</kbd> <kbd>Shift<
 The **Zendr app for Android** shows every session on your computers, says which ones need you, and lets you answer from anywhere. Turn on **Alert me** and your phone buzzes when an agent needs you or finishes, even with the app closed. A tap on the alert opens that session.
 
 - **Sessions** are grouped by space, with the ones that need you at the top. Filter them by *Needs you*, *Working* or *Done*, and pull down to refresh.
-- **The terminal** shows the agent's screen in your computer's colours, sized to fit your phone's width. Pinch to zoom, or turn on *Wrap long lines*. It stays at the newest line, with a button to jump back down.
+- **The terminal** shows the agent's screen in your computer's colours, sized to fit your phone's width. Pinch to zoom, or turn on *Wrap long lines*. It stays at the newest line. Scroll up to read back through the last 2,000 lines: the screen holds still while you read, and **New output** (or sending anything) takes you back to the live screen.
 - **When an agent asks a question** (allow this command? 1. Yes 2. No), its choices are buttons.
 - **The key bar** has **Esc**, **Tab**, the arrows, **Enter** and **Ctrl+C**. Send with an empty box presses Enter.
 - **At a shell prompt**, the same command suggestions as on your computer show as you type. Tap one, or press → or Tab on a keyboard.
