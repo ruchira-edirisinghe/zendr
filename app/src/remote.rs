@@ -13,6 +13,7 @@
 //!   POST /api/send  {terminal, text}      paste and press Enter (`hc send`)
 //!   POST /api/keys  {terminal, keys}      press keys: "enter", "esc", "1", "ctrl+c" (`hc keys`)
 //!   POST /api/focus {terminal}            show it on this computer
+//!   GET  /api/suggest?prefix=git&limit=5  commands from the history that start that way (suggest)
 
 use crate::mods::{self, Request};
 use serde::{Deserialize, Serialize};
@@ -457,6 +458,12 @@ fn route(req: &Req) -> (u16, Value) {
             Ok(hc(&args))
         }),
         ("POST", "/api/focus") => terminal().map(|t| control(json!({ "do": "pane.focus", "args": { "terminal": t } }))),
+        ("GET", "/api/suggest") => {
+            let prefix = q("prefix").unwrap_or_default();
+            let limit = q("limit").and_then(|l| l.parse::<usize>().ok()).unwrap_or(5).clamp(1, 20);
+            let list = if crate::suggest::enabled_in_settings() && prefix.len() <= 1000 { crate::suggest::suggestions(prefix, limit) } else { Vec::new() };
+            Ok((200, json!({ "suggestions": list })))
+        }
         _ => Err((404, json!({ "error": "no such route" }))),
     };
     result.unwrap_or_else(|e| e)
