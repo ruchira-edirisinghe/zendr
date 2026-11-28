@@ -1,0 +1,99 @@
+# Zendr for Windows: builds the app and core for x64 and ARM64 with package.ps1, records
+# build provenance for each zip (GitHub artifact attestations: `gh attestation verify
+# <zip> --repo <owner>/<repo>` shows which commit and workflow made it), Authenticode-signs
+# the programs when the WINDOWS_CERT_PFX_BASE64 and WINDOWS_CERT_PASSWORD secrets are set,
+# and attaches the zips to the release named by the tag (a pushed v* tag, or the `tag` input
+# when run by hand). Releases come from here, not from zips built on someone's computer.
+name: Windows build
+
+on:
+  push:
+    tags: ["v*"]
+  # A change to how Windows builds are made builds them, to show it still works.
+  pull_request:
+    paths: [package.ps1, packaging/**, .github/workflows/windows.yml]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the builds to (empty: build only)"
+        required: false
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+env:
+  RUST_TOOLCHAIN: 1.95.0
+  ZIG_VERSION: 0.16.0
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, target: x86_64-pc-windows-msvc }
+          - { arch: arm64, target: aarch64-pc-windows-msvc }
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app -> target
+            core -> target
+          key: ${{ matrix.arch }}
+      - name: Signing certificate
+        id: cert
+        shell: pwsh
+        env:
+          PFX: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+        run: |
+          if ($env:PFX) {
+            $path = Join-Path $env:RUNNER_TEMP "sign.pfx"
+            [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:PFX))
+            "path=$path" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "No signing certificate in the secrets: the build is unsigned."
+          }
+      - name: Build and pack
+        shell: pwsh
+        env:
+          ZENDR_SIGN_PFX: ${{ steps.cert.outputs.path }}
+          ZENDR_SIGN_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $zig = (Get-Command zig).Source
+          $llvm = "$env:ProgramFiles\LLVM\bin"
+          ./package.ps1 -Arch ${{ matrix.arch }} -Zig $zig -LlvmBin $llvm
+      - name: Forget the certificate
+        if: always() && steps.cert.outputs.path != ''
+        shell: pwsh
+        run: Remove-Item -Force "${{ steps.cert.outputs.path }}" -ErrorAction SilentlyContinue
+      - uses: actions/attest-build-provenance@v2
+        if: github.event_name != 'pull_request'
+        with:
+          subject-path: dist/*.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zendr-windows-${{ matrix.arch }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+      - name: Attach to the release
+        if: github.ref_type == 'tag' || inputs.tag != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+        run: gh release upload "$env:TAG" (Get-ChildItem dist/*.zip, dist/*.sha256).FullName --clobber --repo "$env:GITHUB_REPOSITORY"
