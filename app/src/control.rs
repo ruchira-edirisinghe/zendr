@@ -1,6 +1,11 @@
 //! `herdr-app do <command> [--arg value ... | json]`, `herdr-app ls`, `herdr-app commands`
 //! and `herdr-app status`: drive a running window from a shell (agents, tests)
 //! over `$HERDR_APP_HOME/herdr-app.sock`, one JSON line each way.
+//!
+//! Each request carries `"auth"`: a key the window makes anew at every start and writes to
+//! herdr-app.sock.key, readable only by this account. Whoever can't read the key can't drive
+//! the window, even where they can reach the socket. Only `{"raise": true}` (a second launch
+//! bringing this window to the front) needs no key.
 
 use crate::mods::{self, Request};
 use serde_json::{Value, json};
@@ -9,11 +14,48 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 #[cfg(windows)]
 use uds_windows::{UnixListener, UnixStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 fn socket() -> PathBuf {
     mods::app_dir().join("herdr-app.sock")
+}
+
+fn key_path() -> PathBuf {
+    mods::app_dir().join("herdr-app.sock.key")
+}
+
+/// Writes a new key, readable only by this account (0600 on Unix; on Windows the file sits
+/// in the profile, whose permissions are this account's).
+fn write_key(path: &Path) -> std::io::Result<String> {
+    let key = crate::remote::token();
+    let _ = std::fs::remove_file(path);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)?.write_all(key.as_bytes())?;
+    Ok(key)
+}
+
+fn read_key(path: &Path) -> Option<String> {
+    std::fs::read_to_string(path).ok().map(|k| k.trim().to_owned()).filter(|k| !k.is_empty())
+}
+
+/// Whether a request may run, and the request without its key.
+fn authorize(mut cmd: Value, key: &str) -> Result<Value, &'static str> {
+    if cmd == json!({ "raise": true }) {
+        return Ok(cmd);
+    }
+    let given = cmd.as_object_mut().and_then(|o| o.remove("auth"));
+    let ok = given.as_ref().and_then(Value::as_str).is_some_and(|g| {
+        // Every byte compared, whatever matches.
+        g.len() == key.len() && g.bytes().zip(key.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    });
+    if ok { Ok(cmd) } else { Err("unauthorized: this request needs the key in herdr-app.sock.key") }
 }
 
 /// Serves the socket for this window. A live socket means another window owns this home.
@@ -23,6 +65,10 @@ pub fn listen(tx: async_channel::Sender<Request>) {
         tracing::warn!("another Zendr is serving {}; `herdr-app do` goes there", path.display());
         return;
     }
+    let key = match write_key(&key_path()) {
+        Ok(k) => std::sync::Arc::new(k),
+        Err(e) => return tracing::warn!("cannot write {}: {e}; `herdr-app do` is off", key_path().display()),
+    };
     let _ = std::fs::remove_file(&path);
     let listener = match UnixListener::bind(&path) {
         Ok(l) => l,
@@ -30,25 +76,26 @@ pub fn listen(tx: async_channel::Sender<Request>) {
     };
     let _ = std::thread::Builder::new().name("herdr-app-control".into()).spawn(move || {
         for stream in listener.incoming().flatten() {
-            let tx = tx.clone();
-            std::thread::spawn(move || serve(stream, tx));
+            let (tx, key) = (tx.clone(), key.clone());
+            std::thread::spawn(move || serve(stream, tx, &key));
         }
     });
 }
 
-fn serve(stream: UnixStream, tx: async_channel::Sender<Request>) {
+fn serve(stream: UnixStream, tx: async_channel::Sender<Request>, key: &str) {
     let mut line = String::new();
     if BufReader::new(&stream).read_line(&mut line).is_err() {
         return;
     }
-    let reply = match serde_json::from_str::<Value>(&line) {
+    let request = serde_json::from_str::<Value>(&line).map_err(|e| format!("bad request: {e}")).and_then(|cmd| authorize(cmd, key).map_err(str::to_owned));
+    let reply = match request {
         Ok(cmd) => {
             let timeout = Duration::from_secs(if cmd.get("shot").is_some() { 30 } else { 5 });
             let (reply_tx, reply_rx) = std::sync::mpsc::channel();
             let _ = tx.send_blocking(Request::Control { cmd, reply: reply_tx });
             reply_rx.recv_timeout(timeout).unwrap_or_else(|_| json!({ "error": "the window did not answer" }))
         }
-        Err(e) => json!({ "error": format!("bad request: {e}") }),
+        Err(e) => json!({ "error": e }),
     };
     let _ = (&stream).write_all(format!("{reply}\n").as_bytes());
 }
@@ -96,6 +143,10 @@ pub fn client(args: &[String]) -> i32 {
         },
         _ => return fail("usage: herdr-app ls | herdr-app commands | herdr-app status | herdr-app shot [file.png] | herdr-app do <command> [--arg value ... | json]"),
     };
+    let mut cmd = cmd;
+    if let (Some(o), Some(key)) = (cmd.as_object_mut(), read_key(&key_path())) {
+        o.insert("auth".into(), Value::String(key));
+    }
     let mut stream = match UnixStream::connect(socket()) {
         Ok(s) => s,
         Err(_) if args.first().is_some_and(|v| v == "feedback") => {
@@ -179,6 +230,41 @@ pub fn save_shot<C: gpui::AppContext>(
 fn fail(message: &str) -> i32 {
     eprintln!("herdr-app: {message}");
     2
+}
+
+#[cfg(test)]
+mod auth_tests {
+    use super::*;
+
+    #[test]
+    fn requests_need_the_key_except_raise() {
+        let key = "k3y-0123";
+        assert_eq!(authorize(json!({ "raise": true }), key), Ok(json!({ "raise": true })));
+        assert_eq!(authorize(json!({ "ls": true, "auth": key }), key), Ok(json!({ "ls": true })));
+        assert!(authorize(json!({ "ls": true }), key).is_err());
+        assert!(authorize(json!({ "ls": true, "auth": "k3y-0124" }), key).is_err());
+        assert!(authorize(json!({ "ls": true, "auth": "k3y" }), key).is_err());
+        assert!(authorize(json!({ "do": "remote.pair", "auth": 1 }), key).is_err());
+        // "raise" with anything else still needs the key.
+        assert!(authorize(json!({ "raise": true, "do": "remote.pair" }), key).is_err());
+    }
+
+    #[test]
+    fn each_start_writes_a_new_key_only_this_account_reads() {
+        let dir = std::env::temp_dir().join(format!("herdr-app-key-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("herdr-app.sock.key");
+        let first = write_key(&path).unwrap();
+        let second = write_key(&path).unwrap();
+        assert_ne!(first, second);
+        assert_eq!(read_key(&path).as_deref(), Some(second.as_str()));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(all(test, unix))]
