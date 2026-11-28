@@ -3528,6 +3528,23 @@ impl AppWindow {
                 }
                 return;
             }
+            "terminal.screen" => {
+                let Some(address) = Self::owned(a, "terminal") else { return self.fail("terminal.screen needs a terminal") };
+                let lines = a.get("lines").and_then(Value::as_u64).unwrap_or(300).clamp(1, 2000) as usize;
+                let screen = self.shown_terminal_view(&address, window, cx).and_then(|view| {
+                    view.read(cx).styled_screen(lines).ok_or_else(|| format!("couldn't read terminal {address:?}'s screen"))
+                });
+                match screen {
+                    Ok((text, cols, rows)) => {
+                        let theme = crate::vt::theme();
+                        let hex = |c: crate::vt::Rgb| format!("#{:02x}{:02x}{:02x}", c.0, c.1, c.2);
+                        let palette = json!({ "fg": hex(theme.fg), "bg": hex(theme.bg), "ansi": theme.palette16.iter().map(|c| hex(*c)).collect::<Vec<_>>() });
+                        self.answer(Ok(json!({ "text": text, "cols": cols, "rows": rows, "palette": palette })));
+                    }
+                    Err(error) => self.answer(Err(error)),
+                }
+                return;
+            }
             "terminal.select_all" => {
                 let view = match Self::owned(a, "terminal") {
                     Some(address) => self.shown_terminal_view(&address, window, cx),
