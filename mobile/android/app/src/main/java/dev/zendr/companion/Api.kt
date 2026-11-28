@@ -103,6 +103,21 @@ class Store(context: Context) {
     var wrap: Boolean
         get() = prefs.getBoolean("wrap", false)
         set(v) = prefs.edit().putBoolean("wrap", v).apply()
+
+    /** "system", "light" or "dark". */
+    var theme: String
+        get() = prefs.getString("theme", null) ?: "system"
+        set(v) = prefs.edit().putString("theme", v).apply()
+
+    /** When the app last asked GitHub for a new version (ms). */
+    var updateCheckedAt: Long
+        get() = prefs.getLong("updateCheckedAt", 0L)
+        set(v) = prefs.edit().putLong("updateCheckedAt", v).apply()
+
+    /** A version you chose to skip: no popup for it. */
+    var skipVersion: String?
+        get() = prefs.getString("skipVersion", null)
+        set(v) = prefs.edit().putString("skipVersion", v).apply()
 }
 
 class ApiError(message: String, val unpaired: Boolean = false) : Exception(message)
