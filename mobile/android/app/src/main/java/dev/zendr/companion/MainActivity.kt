@@ -91,11 +91,13 @@ sealed class Screen {
         val status: String? = null,
     ) : Screen()
     data class About(val from: Screen) : Screen()
+    data class Notifications(val from: Screen) : Screen()
 }
 
 class MainActivity : ComponentActivity() {
     private var screen by mutableStateOf<Screen>(Screen.Home)
     private var pendingLink by mutableStateOf<String?>(null)
+    private var pendingUpdate by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -128,6 +130,7 @@ class MainActivity : ComponentActivity() {
     private fun handle(intent: Intent?) {
         intent ?: return
         intent.data?.toString()?.takeIf { it.startsWith("zendr://") }?.let { pendingLink = it; screen = Screen.Pair }
+        if (intent.getBooleanExtra(EXTRA_UPDATE, false)) pendingUpdate = true
         val c = intent.getStringExtra(EXTRA_COMPUTER)
         val t = intent.getStringExtra(EXTRA_TERMINAL)
         if (c != null && t != null) {
@@ -139,15 +142,16 @@ class MainActivity : ComponentActivity() {
     private fun App() {
         val store = remember { Store(this) }
         val about = { screen = Screen.About(screen) }
+        val bell = { screen = Screen.Notifications(screen) }
         when (val s = screen) {
-            Screen.Home -> HomeScreen(store, onOpen = { screen = Screen.Sessions(it.id) }, onAdd = { screen = Screen.Pair }, onAbout = about)
+            Screen.Home -> HomeScreen(store, onOpen = { screen = Screen.Sessions(it.id) }, onAdd = { screen = Screen.Pair }, onAbout = about, onBell = bell)
             Screen.Pair -> {
                 BackHandler { screen = Screen.Home }
                 PairScreen(store, pendingLink, onDone = { pendingLink = null; screen = if (it != null) Screen.Sessions(it.id) else Screen.Home })
             }
             is Screen.Sessions -> {
                 BackHandler { screen = Screen.Home }
-                SessionsScreen(store, s.computer, onBack = { screen = Screen.Home }, onAbout = about, onOpen = {
+                SessionsScreen(store, s.computer, onBack = { screen = Screen.Home }, onAbout = about, onBell = bell, onOpen = {
                     screen = Screen.Terminal(s.computer, it.terminal, it.title, it.app, it.status)
                 })
             }
@@ -158,6 +162,25 @@ class MainActivity : ComponentActivity() {
             is Screen.About -> {
                 BackHandler { screen = s.from }
                 AboutScreen(store, onBack = { screen = s.from })
+            }
+            is Screen.Notifications -> {
+                BackHandler { screen = s.from }
+                NotificationsScreen(store, onBack = { screen = s.from }, onOpen = { n ->
+                    val c = store.computers().firstOrNull { it.id == n.computer }
+                    when {
+                        n.kind == "update" -> Updates.latest?.let { Updates.offer = it } ?: run { pendingUpdate = true }
+                        c != null && n.terminal != null -> screen = Screen.Terminal(c.id, n.terminal, n.session ?: "Session", n.app)
+                        c != null -> screen = Screen.Sessions(c.id)
+                    }
+                })
+            }
+        }
+
+        // From the "new version" notification: look now, and offer it.
+        LaunchedEffect(pendingUpdate) {
+            if (pendingUpdate) {
+                pendingUpdate = false
+                Updates.check(this@MainActivity, store, manual = true)
             }
         }
 
@@ -186,6 +209,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_APP = "app"
         const val EXTRA_STATUS = "status"
+        const val EXTRA_UPDATE = "update"
 
         // What enableEdgeToEdge() puts behind three-button navigation.
         private val LIGHT_SCRIM = android.graphics.Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
@@ -210,7 +234,7 @@ private fun summarize(spaces: List<Space>): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(store: Store, onOpen: (Computer) -> Unit, onAdd: () -> Unit, onAbout: () -> Unit) {
+fun HomeScreen(store: Store, onOpen: (Computer) -> Unit, onAdd: () -> Unit, onAbout: () -> Unit, onBell: () -> Unit) {
     val context = LocalContext.current
     var computers by remember { mutableStateOf(store.computers()) }
     var summary by remember { mutableStateOf<Map<String, Pair<String, Boolean>>>(emptyMap()) }
@@ -223,7 +247,8 @@ fun HomeScreen(store: Store, onOpen: (Computer) -> Unit, onAdd: () -> Unit, onAb
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
                 summary = computers.associate { c ->
-                    c.id to runCatching { summarize(Api.state(store, c)) to true }.getOrElse { "Offline: ${it.message}" to false }
+                    c.id to runCatching { Api.state(store, c).also { Feed.observe(store, c, it) }.let(::summarize) to true }
+                        .getOrElse { "Offline: ${it.message}" to false }
                 }
                 delay(5000)
             }
@@ -234,7 +259,10 @@ fun HomeScreen(store: Store, onOpen: (Computer) -> Unit, onAdd: () -> Unit, onAb
         topBar = {
             ZendrTopBar(
                 navigationIcon = { ThemeButton(store) },
-                actions = { IconButton(onClick = onAbout) { Icon(Icons.Default.Info, "About") } },
+                actions = {
+                    BellButton(store, onBell)
+                    IconButton(onClick = onAbout) { Icon(Icons.Default.Info, "About") }
+                },
             )
         },
         floatingActionButton = {
@@ -393,7 +421,7 @@ private enum class Filter(val label: String) { All("All"), Need("Needs you"), Wo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onAbout: () -> Unit, onOpen: (Session) -> Unit) {
+fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onAbout: () -> Unit, onBell: () -> Unit, onOpen: (Session) -> Unit) {
     val scope = rememberCoroutineScope()
     val computer = store.computers().firstOrNull { it.id == computerId }
     var spaces by remember { mutableStateOf<List<Space>?>(null) }
@@ -406,7 +434,7 @@ fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onAbout
     suspend fun load() {
         val c = store.computers().firstOrNull { it.id == computerId } ?: return
         runCatching { Api.state(store, c) }
-            .onSuccess { spaces = it; error = null }
+            .onSuccess { spaces = it; error = null; Feed.observe(store, c, it) }
             .onFailure { error = it.message }
     }
 
@@ -436,7 +464,10 @@ fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onAbout
     Scaffold(topBar = {
         ZendrTopBar(
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-            actions = { IconButton(onClick = onAbout) { Icon(Icons.Default.Info, "About") } },
+            actions = {
+                BellButton(store, onBell)
+                IconButton(onClick = onAbout) { Icon(Icons.Default.Info, "About") }
+            },
         )
     }) { pad ->
         PullToRefreshBox(
