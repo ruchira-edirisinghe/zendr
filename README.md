@@ -280,6 +280,7 @@ Right-click a session, a tab or a hub card, or press <kbd>Ctrl</kbd> <kbd>Shift<
 
 | | |
 | --- | --- |
+| **Command suggestions** <kbd>→</kbd> or <kbd>Tab</kbd> | As you type at a shell prompt, the command you run most often that starts that way shows in grey after the cursor. <kbd>→</kbd> or <kbd>Tab</kbd> takes it; keep typing to ignore it. Zendr learns from the commands you run (starting from your PowerShell, bash or zsh history), never from agents' prompts, and skips commands that start with a space or look like they hold a password or token. **Clear command suggestions** in the palette forgets them all. |
 | **Command search** <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>R</kbd> | Your shell history and saved workflows, in one searchable list. <kbd>Enter</kbd> pastes the command for you to check; <kbd>Ctrl</kbd> <kbd>Enter</kbd> runs it. |
 | **Workflows** | Saved commands with `{{placeholders}}`. Zendr asks you to fill them in. Save one from history, or edit `workflows.json`. |
 | **Ask AI** <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Space</kbd> | Say what you want (*"find files over 100 MB"*) and Claude Code writes up to three commands for your shell. |
@@ -405,6 +406,7 @@ Every add-on ships unchanged with its author's licence (`config/addons/<name>/LI
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Y</kbd> | Colour the session you're in |
 | <kbd>Alt</kbd> <kbd>Space</kbd> | Search everything: sessions, files, commands, settings, notifications |
 | <kbd>Ctrl</kbd> <kbd>F</kbd> | Search the code of the repo you're in (<kbd>Tab</kbd> switches between the two) |
+| <kbd>→</kbd> or <kbd>Tab</kbd> | Take the grey command suggestion at a shell prompt |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>R</kbd> | Command search |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Space</kbd> | Ask AI for a command |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>J</kbd> | Launch configurations |
@@ -496,7 +498,7 @@ Zendr stands on two projects:
 
 - **[Herdr](https://herdr.dev)** ([herdrdev](https://github.com/herdrdev)) is the software Zendr is made from. Herdr does the hard part: terminals that keep running in a background core, agent status, spaces and tabs, the mod system and the GPU-rendered UI. Zendr is Herdr's desktop app, renamed, with a new face and a set of mods.
 - **[cmux](https://cmux.com)** by Manaflow inspired the notifications, attention rings, the sidebar's status lines and agent summaries. No cmux code is included.
-- **[Warp](https://www.warp.dev)** inspired command search, workflows, Ask AI and launch configurations. No Warp code is included.
+- **[Warp](https://www.warp.dev)** inspired command suggestions, command search, workflows, Ask AI and launch configurations. No Warp code is included.
 - **The Herdr community**: the authors of the add-ons in Settings → Claude tools and Settings → Add-ons, each credited above and in its `NOTICE.md`.
 
 ## License
