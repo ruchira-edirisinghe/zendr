@@ -72,6 +72,7 @@ class WatchService : Service() {
             }
             for (c in store.computers()) {
                 val spaces = runCatching { Api.state(store, c) }.getOrNull() ?: continue
+                Feed.observe(store, c, spaces)
                 for (s in spaces.flatMap { it.sessions }) {
                     val key = "${c.id}/${s.terminal}"
                     val before = seen[key]
@@ -84,6 +85,10 @@ class WatchService : Service() {
                 }
             }
             first = false
+            // A new version: noted in the list and, once, as a notification.
+            val noted = store.notedVersion
+            Updates.checkNow(this, store)
+            Updates.latest?.takeIf { store.notedVersion != noted && it.version == store.notedVersion }?.let { update(it) }
             delay(20_000)
         }
     }
@@ -112,6 +117,24 @@ class WatchService : Service() {
         NotificationManagerCompat.from(this).notify(id, n)
     }
 
+    private fun update(r: Release) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+        val open = Intent(this, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_UPDATE, true)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val pending = PendingIntent.getActivity(this, ID_UPDATE, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = NotificationCompat.Builder(this, CHANNEL_UPDATES)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle("Zendr ${r.version} is out")
+            .setContentText("Tap to see what's new and download it.")
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .build()
+        NotificationManagerCompat.from(this).notify(ID_UPDATE, n)
+    }
+
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
@@ -120,13 +143,16 @@ class WatchService : Service() {
     companion object {
         private const val CHANNEL_WATCH = "watch"
         private const val CHANNEL_ALERTS = "alerts"
+        private const val CHANNEL_UPDATES = "updates"
         private const val ID_WATCH = 1
+        private const val ID_UPDATE = 2
 
         fun channels(context: Context) {
             if (Build.VERSION.SDK_INT < 26) return
             val nm = context.getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(NotificationChannel(CHANNEL_WATCH, "Watching", NotificationManager.IMPORTANCE_MIN))
             nm.createNotificationChannel(NotificationChannel(CHANNEL_ALERTS, "Agents that need you", NotificationManager.IMPORTANCE_HIGH))
+            nm.createNotificationChannel(NotificationChannel(CHANNEL_UPDATES, "New versions", NotificationManager.IMPORTANCE_DEFAULT))
         }
 
         fun start(context: Context) = ContextCompat.startForegroundService(context, Intent(context, WatchService::class.java))
