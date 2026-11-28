@@ -66,7 +66,9 @@ class FlowTest {
                 return when (request.path?.substringBefore('?')) {
                     "/api/hello" -> json("""{"app":"zendr","version":"0.2.0","name":"TEST-PC","os":"windows"}""")
                     "/api/state" -> json(state())
-                    "/api/read" -> json("""{"text":"Codex wants to run: npm test\n> 1. Yes\n  2. No"}""")
+                    // A computer that sends colours: its escapes and its theme.
+                    "/api/read" -> json("""{"text":"\u001b[1mCodex\u001b[0m wants to run: npm test\r\n> 1. Yes\r\n  2. No","styled":true,"cols":60,
+                        "palette":{"fg":"#d7dae0","bg":"#0e1013","ansi":["#000000","#ff0000","#00ff00","#ffff00","#0000ff","#ff00ff","#00ffff","#ffffff","#000000","#ff0000","#00ff00","#ffff00","#0000ff","#ff00ff","#00ffff","#ffffff"]}}""")
                     "/api/send", "/api/keys", "/api/focus" -> {
                         received += request.path + " " + request.body.readUtf8()
                         json("""{"ok":true}""")
@@ -102,6 +104,11 @@ class FlowTest {
             compose.waitUntil(10_000) { received.any { it.startsWith("/api/send") && it.contains("yes, run it") && it.contains("\"t2\"") } }
             compose.onAllNodesWithText("Esc").onFirst().performClick()
             compose.waitUntil(10_000) { received.any { it.startsWith("/api/keys") && it.contains("esc") } }
+
+            // It asks a question: its choices are buttons, and one press answers it.
+            waitForText("Choose an answer")
+            compose.onAllNodesWithText("No").onFirst().performClick()
+            compose.waitUntil(10_000) { received.any { it.startsWith("/api/keys") && it.contains("\"2\"") } }
 
             // Back to the computers with the app's own back arrows (terminal, then sessions):
             // it's listed and remembered.
