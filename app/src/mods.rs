@@ -1215,6 +1215,34 @@ fn exec_future(command: String, args: Vec<String>, cwd: Option<String>, on: Opti
     }
 }
 
+/// What one mod copy may touch through `herdr`: everything, unless it's an add-on.
+struct Guard {
+    name: String,
+    grant: crate::addon_grants::Grant,
+    /// Where it may read without `read`: its own folder, its data, its add-on's files.
+    reads: Vec<PathBuf>,
+    /// Where it may write without `write`: its data folder.
+    writes: Vec<PathBuf>,
+}
+
+impl Guard {
+    fn new(name: &str) -> Self {
+        let grant = crate::addon_grants::for_mod(name).unwrap_or(crate::addon_grants::Grant::ALL);
+        let app = app_dir();
+        let data = app.join("data").join(name);
+        let mut reads = vec![app.join("mods").join(name), data.clone()];
+        reads.extend(crate::addon_grants::addon_of(name).map(|id| app.join("addons").join(id)));
+        Self { name: name.to_owned(), grant, reads, writes: vec![data] }
+    }
+
+    fn allow(&self, ok: bool, what: &str) -> Result<(), HostError> {
+        if ok {
+            return Ok(());
+        }
+        Err(HostError::new(format!("the {} add-on may not {what}; Settings → Add-ons shows what it may do", self.name)))
+    }
+}
+
 fn module(inst: Instance, copy: u64) -> HostModule {
     let reads = Rc::new(RefCell::new(LiveReads::default()));
     LIVE_READS.with_borrow_mut(|copies| {
@@ -1225,6 +1253,9 @@ fn module(inst: Instance, copy: u64) -> HostModule {
     let feedback_frame = inst.name == "frame-feedback";
     let feedback_from = inst.props.get("from").and_then(Value::as_str).unwrap_or("person").to_owned();
     let feedback_layout = inst.props.get("layout").and_then(Value::as_str).unwrap_or("other").to_owned();
+    // An add-on gets only what it declared and the person allowed (addon_grants.rs).
+    let guard = std::sync::Arc::new(Guard::new(&inst.name));
+    let (g_exec, g_read, g_write, g_hc, g_run, g_watch) = (guard.clone(), guard.clone(), guard.clone(), guard.clone(), guard.clone(), guard.clone());
     let (cmd_tx, commands) = async_channel::unbounded::<String>();
     COMMANDS.with_borrow_mut(|commands| {
         commands.retain(|(_, _, tx)| !tx.is_closed());
@@ -1232,14 +1263,16 @@ fn module(inst: Instance, copy: u64) -> HostModule {
     });
     HostModule::new("herdr")
         .declarations(DECLARATIONS)
-        .async_function("exec", |a| {
+        .async_function("exec", move |a| {
+            g_exec.allow(g_exec.grant.exec, "run programs")?;
             let command = a.string(0)?.to_owned();
             if checking() { tracing::warn!("check: mod exec'd `{command}`; the child runs for real"); }
             Ok(exec_future(command, strings(a.get(1)), opt_str(a.get(2), "cwd"), opt_str(a.get(2), "on"), exec_limit(a.get(2))?))
         })
-        .async_function("readTextFile", |a| {
+        .async_function("readTextFile", move |a| {
             let path = a.string(0)?.to_owned();
             let on = opt_str(a.get(1), "on");
+            g_read.allow(g_read.grant.read || (on.is_none() && crate::addon_grants::inside(&path, &g_read.reads)), "read files outside its own folder")?;
             let read = crate::mod_files::read_with(on, path, |on, path| match on {
                 Some(m) => read_remote(m, path),
                 None => crate::mod_files::read(Path::new(path)),
@@ -1249,13 +1282,15 @@ fn module(inst: Instance, copy: u64) -> HostModule {
                 Ok(text.map(HostValue::from).unwrap_or(HostValue::Null))
             })
         })
-        .async_function("writeTextFile", |a| {
+        .async_function("writeTextFile", move |a| {
             let expected = a.get(2).and_then(|v| match v { HostValue::Str(s) => Some(s.clone()), _ => None });
             let path = a.string(0)?.to_owned();
+            g_write.allow(g_write.grant.write || crate::addon_grants::inside(&path, &g_write.writes), "write files outside its data folder")?;
             if checking() { tracing::warn!("check: mod wrote `{path}`; the write lands for real"); }
             Ok(crate::mod_files::write_text(path, a.string(1)?.to_owned(), expected))
         })
-        .async_function("hc", |a| {
+        .async_function("hc", move |a| {
+            g_hc.allow(g_hc.grant.terminals, "read or drive terminals")?;
             if checking() { tracing::warn!("check: mod called hc; it runs for real"); }
             Ok(exec_future("hc".into(), strings(a.get(0)), None, None, EXEC_LIMIT))
         })
@@ -1365,9 +1400,11 @@ fn module(inst: Instance, copy: u64) -> HostModule {
             crate::sound::play(a.string(0)?);
             Ok(HostValue::Null)
         })
-        .function("run", |a| {
+        .function("run", move |a| {
             let name = a.string(0)?.to_owned();
             let args = a.get(1).map(from_host).unwrap_or(Value::Null);
+            // Commands that start a program run it as surely as exec does.
+            g_run.allow(g_run.grant.exec || args.get("argv").is_none_or(Value::is_null), "start programs")?;
             if let Some(command) = crate::commands::find(&name) {
                 crate::commands::validate_args(command, &args).map_err(HostError::new)?;
             }
@@ -1464,8 +1501,9 @@ fn module(inst: Instance, copy: u64) -> HostModule {
             set_shared(a.string(0)?.to_owned(), from_host(a.value(1)?));
             Ok(HostValue::Null)
         })
-        .cancellable_async_function("watchFolder", HostValue::Array(vec![]), |a| {
+        .cancellable_async_function("watchFolder", HostValue::Array(vec![]), move |a| {
             let path = a.string(0)?.to_owned();
+            g_watch.allow(g_watch.grant.read || crate::addon_grants::inside(&path, &g_watch.reads), "watch files outside its own folder")?;
             Ok(async move { crate::files::next_change(path).await.map(|v| to_host(&json!(v))).map_err(HostError::new) })
         })
         .async_function("nextCommand", move |_| {
@@ -1526,6 +1564,21 @@ fn capabilities_at(home: PathBuf, app: PathBuf, read_mods: bool) -> Capabilities
         .clipboard_write(true)
 }
 
+/// An add-on's capabilities in the shell's own APIs, as its grant says.
+fn addon_capabilities(name: &str, grant: crate::addon_grants::Grant) -> Capabilities {
+    let app = app_dir();
+    let data = app.join("data").join(name);
+    let read_roots = if grant.read { vec![home()] } else { vec![app.join("mods").join(name), data.clone()] };
+    Capabilities::new()
+        .read_roots(read_roots)
+        .write_roots(if grant.write { vec![app] } else { vec![data] })
+        .execute(if grant.exec { ExecuteGrant::Unrestricted } else { ExecuteGrant::Denied })
+        .network(if grant.network { NetworkGrant::Unrestricted } else { NetworkGrant::Denied })
+        .storage(true)
+        .clipboard_read(true)
+        .clipboard_write(true)
+}
+
 /// Checks exercise shared state in memory, without reading or writing the person's
 /// file. A check still loads the mod for real, so mods are told (`herdr.checking()`)
 /// and its exec and write side effects warn.
@@ -1576,7 +1629,10 @@ fn mod_policy(inst: &Instance) -> (u64, gpui_shell::policy::Policy) {
     let policy = gpui_shell::policy::Policy::new()
         .with_application(inst.key())
         // The shipped palette reads manifests even when the app home is outside the login home.
-        .with_capabilities(capabilities_at(home(), app_dir(), inst.name == "frame-palette"))
+        .with_capabilities(match crate::addon_grants::for_mod(&inst.name) {
+            None => capabilities_at(home(), app_dir(), inst.name == "frame-palette"),
+            Some(grant) => addon_capabilities(&inst.name, grant),
+        })
         .with_shared_storage_path(dir.join(file))
         .with_host_module(module(inst.clone(), copy))
         .expect("herdr module is valid");
