@@ -17,7 +17,12 @@
    "show": "status",
    "size": 380,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "network",
+    "terminals"
+   ]
   },
   {
    "id": "claude-usage",
@@ -35,7 +40,14 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "network",
+    "read",
+    "write",
+    "terminals"
+   ]
   },
   {
    "id": "insights",
@@ -53,7 +65,12 @@
    "show": "tab",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "write"
+   ]
   },
   {
    "id": "skill-ledger",
@@ -71,7 +88,10 @@
    "show": "side",
    "size": null,
    "needs": "Node.js",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec"
+   ]
   },
   {
    "id": "wrapped",
@@ -89,7 +109,10 @@
    "show": "open",
    "size": null,
    "needs": "Python 3",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec"
+   ]
   },
   {
    "id": "sessions",
@@ -107,7 +130,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "revive",
@@ -125,7 +153,12 @@
    "show": "open",
    "size": null,
    "needs": "Node.js",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "network",
+    "terminals"
+   ]
   },
   {
    "id": "reopen-tab",
@@ -143,7 +176,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "claude-tab-name",
@@ -161,7 +199,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "recap",
@@ -179,7 +222,11 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "terminals"
+   ]
   },
   {
    "id": "over9k-switcher",
@@ -197,7 +244,8 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": []
   },
   {
    "id": "over9k-prompts",
@@ -215,7 +263,12 @@
    "show": "side",
    "size": null,
    "needs": "Python 3",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "prompt-history",
@@ -233,7 +286,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "prompt-jump",
@@ -251,7 +309,11 @@
    "show": "side",
    "size": null,
    "needs": "Node.js",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "terminals"
+   ]
   },
   {
    "id": "redpen",
@@ -269,7 +331,11 @@
    "show": "open",
    "size": null,
    "needs": "Python 3",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "terminals"
+   ]
   },
   {
    "id": "fleece",
@@ -288,7 +354,10 @@
    "show": "open",
    "size": null,
    "needs": "Node.js",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec"
+   ]
   },
   {
    "id": "claude-goal",
@@ -306,7 +375,13 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "write",
+    "terminals"
+   ]
   },
   {
    "id": "agent-review",
@@ -324,7 +399,11 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "terminals"
+   ]
   },
   {
    "id": "walkthrough",
@@ -342,7 +421,14 @@
    "show": "open",
    "size": null,
    "needs": "GitHub CLI (gh)",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "network",
+    "read",
+    "write",
+    "terminals"
+   ]
   },
   {
    "id": "tourist",
@@ -360,7 +446,13 @@
    "show": "open",
    "size": null,
    "needs": "Node.js",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "write",
+    "terminals"
+   ]
   },
   {
    "id": "session-changes",
@@ -378,7 +470,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "arena",
@@ -396,7 +493,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "automations",
@@ -414,7 +516,12 @@
    "show": "side",
    "size": null,
    "needs": "the herdr-automations CLI from its repo",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "over9k-todos",
@@ -432,7 +539,13 @@
    "show": "side",
    "size": null,
    "needs": "Python 3",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "write",
+    "terminals"
+   ]
   },
   {
    "id": "desk",
@@ -450,7 +563,13 @@
    "show": "side",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "write",
+    "terminals"
+   ]
   },
   {
    "id": "herd",
@@ -468,7 +587,12 @@
    "show": "side",
    "size": null,
    "needs": "Python 3",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "float-space",
@@ -491,7 +615,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "read",
+    "write",
+    "terminals"
+   ]
   },
   {
    "id": "recall",
@@ -509,7 +638,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "jump",
@@ -527,7 +661,11 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "read",
+    "write"
+   ]
   },
   {
    "id": "find-in-files",
@@ -545,7 +683,11 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read"
+   ]
   },
   {
    "id": "kiosk",
@@ -564,7 +706,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "write"
+   ]
   },
   {
    "id": "open-with",
@@ -582,7 +729,8 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": []
   },
   {
    "id": "ssh-hosts",
@@ -600,7 +748,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "network",
+    "read"
+   ]
   },
   {
    "id": "run",
@@ -618,7 +771,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "run-scripts",
@@ -636,7 +794,11 @@
    "show": "side",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read"
+   ]
   },
   {
    "id": "greenflagged",
@@ -654,7 +816,12 @@
    "show": "side",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "network",
+    "read"
+   ]
   },
   {
    "id": "github",
@@ -672,7 +839,10 @@
    "show": "open",
    "size": null,
    "needs": "GitHub CLI (gh)",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec"
+   ]
   },
   {
    "id": "markdown-panel",
@@ -690,7 +860,12 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read",
+    "write"
+   ]
   },
   {
    "id": "herdr-md",
@@ -708,7 +883,11 @@
    "show": "pane",
    "size": null,
    "needs": "Node.js",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "read"
+   ]
   },
   {
    "id": "tab-notes",
@@ -726,7 +905,11 @@
    "show": "side",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "read",
+    "write"
+   ]
   },
   {
    "id": "blueprint",
@@ -744,7 +927,14 @@
    "show": "side",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "network",
+    "read",
+    "write",
+    "terminals"
+   ]
   },
   {
    "id": "vitals",
@@ -762,7 +952,10 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec"
+   ]
   },
   {
    "id": "pageme",
@@ -780,7 +973,11 @@
    "show": "open",
    "size": null,
    "needs": "a Telegram bot (see its README)",
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "terminals"
+   ]
   },
   {
    "id": "herdr-pets",
@@ -798,7 +995,11 @@
    "show": "place",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "read",
+    "terminals"
+   ]
   },
   {
    "id": "lichess",
@@ -816,7 +1017,12 @@
    "show": "side",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": [
+    "exec",
+    "network",
+    "read"
+   ]
   },
   {
    "id": "jumpycritter",
@@ -834,7 +1040,8 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": []
   },
   {
    "id": "crawlspace",
@@ -852,7 +1059,8 @@
    "show": "open",
    "size": null,
    "needs": null,
-   "preview": "preview.jpg"
+   "preview": "preview.jpg",
+   "permissions": []
   }
  ]
 }
