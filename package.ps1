@@ -8,6 +8,8 @@
 # aarch64-pc-windows-msvc) and Visual Studio Build Tools' compilers for that architecture.
 # The zip holds the app, herdr-core with Microsoft's ConPTY, Zendr's mods and layout, and
 # install.ps1 (packaging\install.ps1), which sets everything up for the current user.
+# With ZENDR_SIGN_PFX (a .pfx file) and ZENDR_SIGN_PASSWORD set, the app and the core are
+# Authenticode-signed before packing (.github/workflows/windows.yml does this from secrets).
 param(
     [ValidateSet("x64", "arm64")][string]$Arch = "x64",
     [string]$AppPath = (Join-Path $PSScriptRoot "app"),
@@ -67,6 +69,19 @@ $coreOut = Join-Path $core $out
 Write-Host "== Zendr for $triple"
 Invoke-Cargo $app
 $appOut = Join-Path $app $out
+
+# Authenticode, when a certificate is given (CI passes one from its secrets): both programs
+# are signed and timestamped before they're packed, so Windows shows who made them.
+if ($env:ZENDR_SIGN_PFX) {
+    $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\$host_\signtool.exe" -ErrorAction SilentlyContinue |
+        Sort-Object { [version]$_.Directory.Parent.Name } | Select-Object -Last 1
+    if (-not $signtool) { throw "Missing the Windows SDK's signtool.exe." }
+    $timestamp = if ($env:ZENDR_SIGN_TIMESTAMP) { $env:ZENDR_SIGN_TIMESTAMP } else { "http://timestamp.digicert.com" }
+    foreach ($exe in @((Join-Path $appOut "herdr-app.exe"), (Join-Path $coreOut "herdr-core.exe"))) {
+        & $signtool.FullName sign /fd SHA256 /td SHA256 /tr $timestamp /f $env:ZENDR_SIGN_PFX /p $env:ZENDR_SIGN_PASSWORD $exe
+        if ($LASTEXITCODE) { throw "Signing $exe failed (exit $LASTEXITCODE)." }
+    }
+}
 
 $version = (Select-String -Path (Join-Path $app "Cargo.toml") -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
 $name = "Zendr-$version-windows-$Arch"
