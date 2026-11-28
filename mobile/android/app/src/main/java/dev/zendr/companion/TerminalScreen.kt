@@ -63,6 +63,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -123,12 +124,17 @@ private const val MAX_TEXT = 22f
 /** One session on one computer: its screen, kept up to date, and ways to answer it. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TerminalScreen(store: Store, s: Screen.Terminal, onBack: () -> Unit) {
+fun TerminalScreen(store: Store, s: Screen.Terminal, onBack: () -> Unit, onPair: () -> Unit) {
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     val clipboard = LocalClipboardManager.current
     var screen by remember { mutableStateOf<ScreenText?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var problem by remember { mutableStateOf<Problem?>(null) }
+    // Failed reads in a row; the help pops up once per run of them.
+    var misses by remember { mutableIntStateOf(0) }
+    var help by remember { mutableStateOf(false) }
+    var helped by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf(s.status) }
     var input by remember { mutableStateOf(TextFieldValue("")) }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -156,10 +162,19 @@ fun TerminalScreen(store: Store, s: Screen.Terminal, onBack: () -> Unit) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             var n = 0
             while (true) {
-                val c = computer() ?: break
+                val c = computer()
+                if (c == null) {
+                    problem = Problem.Missing
+                    break
+                }
                 runCatching { Api.screen(store, c, s.terminal) }
-                    .onSuccess { if (it != screen) screen = it; error = null }
-                    .onFailure { error = it.message }
+                    .onSuccess { if (it != screen) screen = it; error = null; problem = null; misses = 0; helped = false }
+                    .onFailure {
+                        error = it.message
+                        problem = it.problem()
+                        misses++
+                        if (problem == Problem.Offline && misses >= HELP_AFTER + 1 && !helped) { help = true; helped = true }
+                    }
                 if (n++ % 4 == 0) {
                     runCatching { Api.state(store, c) }.onSuccess { spaces ->
                         spaces.flatMap { it.sessions }.firstOrNull { it.terminal == s.terminal }?.let { status = it.status }
@@ -310,7 +325,12 @@ fun TerminalScreen(store: Store, s: Screen.Terminal, onBack: () -> Unit) {
         },
         snackbarHost = { SnackbarHost(snack) },
     ) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad).imePadding()) {
+        // Nothing to show but the trouble: a screen for it. An offline blip keeps the screen, with a note.
+        val shownProblem = problem?.takeIf { screen == null || it != Problem.Offline }
+        if (shownProblem != null) ProblemView(
+            shownProblem, computerName.ifEmpty { "the computer" }, error, Modifier.padding(pad),
+            onRetry = { refreshNow++ }, onHelp = { help = true }, onPair = onPair, onBack = onBack,
+        ) else Column(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad).imePadding()) {
             // ------------------------------------------------ the screen
             BoxWithConstraints(
                 Modifier.weight(1f).fillMaxWidth().padding(horizontal = 6.dp)
@@ -339,15 +359,6 @@ fun TerminalScreen(store: Store, s: Screen.Terminal, onBack: () -> Unit) {
                 val hScroll = rememberScrollState()
 
                 when {
-                    screen == null && error != null -> Column(
-                        Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text("Can't reach $computerName", color = palette.fg, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                        Spacer(Modifier.height(6.dp))
-                        Text(error.orEmpty(), color = palette.fg.copy(alpha = 0.7f), fontSize = 13.sp)
-                        Spacer(Modifier.height(14.dp))
-                        FilledTonalButton(onClick = { refreshNow++ }) { Text("Try again") }
-                    }
                     screen == null -> Text("Connecting…", color = palette.fg.copy(alpha = 0.7f), modifier = Modifier.align(Alignment.Center))
                     else -> SelectionContainer {
                         Box(if (wrap) Modifier.fillMaxSize() else Modifier.fillMaxSize().horizontalScroll(hScroll)) {
@@ -391,8 +402,11 @@ fun TerminalScreen(store: Store, s: Screen.Terminal, onBack: () -> Unit) {
                 }
                 if (error != null && screen != null) {
                     Text(
-                        "Reconnecting… $error", color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Red.copy(alpha = 0.85f), RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)).padding(horizontal = 12.dp, vertical = 4.dp),
+                        "Reconnecting to ${computerName.ifEmpty { "the computer" }}… Tap for help", color = Color.White, fontSize = 12.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                            .background(Red.copy(alpha = 0.85f), RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                            .clickable { help = true }.padding(horizontal = 12.dp, vertical = 4.dp),
                     )
                 }
             }
@@ -478,6 +492,8 @@ fun TerminalScreen(store: Store, s: Screen.Terminal, onBack: () -> Unit) {
             }
         }
     }
+
+    if (help) ConnectionHelp(computerName.ifEmpty { "the computer" }, onRetry = { help = false; refreshNow++ }, onClose = { help = false })
 }
 
 /** The rest of a suggested command after what's typed, in grey (Warp's ghost text). */
