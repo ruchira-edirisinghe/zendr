@@ -9,7 +9,8 @@
 //!
 //!   GET  /api/hello                       this computer: name, OS, version
 //!   GET  /api/state                       spaces, tabs and terminals with their state (`herdr-app ls`)
-//!   GET  /api/read?terminal=t7&lines=80   a terminal's screen (`hc read`)
+//!   GET  /api/read?terminal=t7&lines=80   a terminal's screen (`hc read`); &styled=1 adds its
+//!                                         colours (escape codes), cols and the theme's palette
 //!   POST /api/send  {terminal, text}      paste and press Enter (`hc send`)
 //!   POST /api/keys  {terminal, keys}      press keys: "enter", "esc", "1", "ctrl+c" (`hc keys`)
 //!   POST /api/focus {terminal}            show it on this computer
@@ -432,8 +433,15 @@ fn route(req: &Req) -> (u16, Value) {
         )),
         ("GET", "/api/state") => Ok(control(json!({ "ls": true }))),
         ("GET", "/api/read") => terminal().map(|t| {
-            let lines = q("lines").and_then(|l| l.parse::<u32>().ok()).unwrap_or(60).min(2000).to_string();
-            hc(&["read", "--json", "--lines", &lines, "--", &t])
+            let lines = q("lines").and_then(|l| l.parse::<u32>().ok()).unwrap_or(60).min(2000);
+            // With colours when the window shows that terminal; else the core's plain text.
+            if q("styled").as_deref() == Some("1") {
+                if let (200, mut screen) = control(json!({ "do": "terminal.screen", "args": { "terminal": t, "lines": lines } })) {
+                    screen["styled"] = json!(true);
+                    return (200, screen);
+                }
+            }
+            hc(&["read", "--json", "--lines", &lines.to_string(), "--", &t])
         }),
         ("POST", "/api/send") => terminal().and_then(|t| {
             let text = body.get("text").and_then(Value::as_str).unwrap_or_default();
