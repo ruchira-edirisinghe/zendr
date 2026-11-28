@@ -304,6 +304,15 @@ Show a terminal in a pane for now, in place of its own (no terminal: back).
 | `terminal` | no |
 | `pane` | no |
 
+## `terminal.screen`
+
+A terminal's last lines (default 300, up to 2000; history included) with the escape codes that colour them, its cols and rows, and the theme's colours (fg, bg, the 16 ANSI colours). The terminal must be shown in this window. The phone app reads terminals with it.
+
+| Argument | Required |
+|---|---|
+| `terminal` | yes |
+| `lines` | no |
+
 ## `terminal.select_all`
 
 Select a terminal's whole screen and scrollback (default: the focused one), ready to copy. On the alternate screen, select only that screen.
