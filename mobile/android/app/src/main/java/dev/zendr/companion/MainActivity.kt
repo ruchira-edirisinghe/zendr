@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -88,6 +90,7 @@ sealed class Screen {
         val app: String? = null,
         val status: String? = null,
     ) : Screen()
+    data class About(val from: Screen) : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -102,7 +105,18 @@ class MainActivity : ComponentActivity() {
             Store(this).computers().singleOrNull()?.let { screen = Screen.Sessions(it.id) }
         }
         handle(intent)
-        setContent { ZendrTheme { App() } }
+        Appearance.load(Store(this))
+        setContent {
+            // The status and navigation bars' icons follow light or dark, as the app does.
+            val dark = isDark()
+            LaunchedEffect(dark) {
+                enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT) { dark },
+                    navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { dark },
+                )
+            }
+            ZendrTheme { App() }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -124,15 +138,16 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun App() {
         val store = remember { Store(this) }
+        val about = { screen = Screen.About(screen) }
         when (val s = screen) {
-            Screen.Home -> HomeScreen(store, onOpen = { screen = Screen.Sessions(it.id) }, onAdd = { screen = Screen.Pair })
+            Screen.Home -> HomeScreen(store, onOpen = { screen = Screen.Sessions(it.id) }, onAdd = { screen = Screen.Pair }, onAbout = about)
             Screen.Pair -> {
                 BackHandler { screen = Screen.Home }
                 PairScreen(store, pendingLink, onDone = { pendingLink = null; screen = if (it != null) Screen.Sessions(it.id) else Screen.Home })
             }
             is Screen.Sessions -> {
                 BackHandler { screen = Screen.Home }
-                SessionsScreen(store, s.computer, onBack = { screen = Screen.Home }, onOpen = {
+                SessionsScreen(store, s.computer, onBack = { screen = Screen.Home }, onAbout = about, onOpen = {
                     screen = Screen.Terminal(s.computer, it.terminal, it.title, it.app, it.status)
                 })
             }
@@ -140,6 +155,28 @@ class MainActivity : ComponentActivity() {
                 BackHandler { screen = Screen.Sessions(s.computer) }
                 TerminalScreen(store, s, onBack = { screen = Screen.Sessions(s.computer) })
             }
+            is Screen.About -> {
+                BackHandler { screen = s.from }
+                AboutScreen(store, onBack = { screen = s.from })
+            }
+        }
+
+        // A new version: offered in a popup when the app opens, and every few hours while it's open.
+        val lifecycle = LocalLifecycleOwner.current.lifecycle
+        LaunchedEffect(Unit) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    Updates.checkNow(this@MainActivity, store)
+                    delay(15 * 60 * 1000L)
+                }
+            }
+        }
+        Updates.offer?.let { r ->
+            UpdateDialog(
+                r, Updates.installed(this),
+                onSkip = { store.skipVersion = r.version; Updates.offer = null },
+                onClose = { Updates.offer = null },
+            )
         }
     }
 
@@ -149,6 +186,10 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_APP = "app"
         const val EXTRA_STATUS = "status"
+
+        // What enableEdgeToEdge() puts behind three-button navigation.
+        private val LIGHT_SCRIM = android.graphics.Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+        private val DARK_SCRIM = android.graphics.Color.argb(0x80, 0x1b, 0x1b, 0x1b)
     }
 }
 
@@ -169,7 +210,7 @@ private fun summarize(spaces: List<Space>): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(store: Store, onOpen: (Computer) -> Unit, onAdd: () -> Unit) {
+fun HomeScreen(store: Store, onOpen: (Computer) -> Unit, onAdd: () -> Unit, onAbout: () -> Unit) {
     val context = LocalContext.current
     var computers by remember { mutableStateOf(store.computers()) }
     var summary by remember { mutableStateOf<Map<String, Pair<String, Boolean>>>(emptyMap()) }
@@ -190,7 +231,12 @@ fun HomeScreen(store: Store, onOpen: (Computer) -> Unit, onAdd: () -> Unit) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Zendr", fontWeight = FontWeight.SemiBold) }) },
+        topBar = {
+            ZendrTopBar(
+                navigationIcon = { ThemeButton(store) },
+                actions = { IconButton(onClick = onAbout) { Icon(Icons.Default.Info, "About") } },
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(onClick = onAdd, icon = { Icon(Icons.Default.Add, null) }, text = { Text("Add computer") })
         },
@@ -347,7 +393,7 @@ private enum class Filter(val label: String) { All("All"), Need("Needs you"), Wo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onOpen: (Session) -> Unit) {
+fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onAbout: () -> Unit, onOpen: (Session) -> Unit) {
     val scope = rememberCoroutineScope()
     val computer = store.computers().firstOrNull { it.id == computerId }
     var spaces by remember { mutableStateOf<List<Space>?>(null) }
@@ -388,14 +434,9 @@ fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onOpen:
     }
 
     Scaffold(topBar = {
-        TopAppBar(
-            title = {
-                Column {
-                    Text(computer?.name ?: "Computer", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    spaces?.let { Text(summarize(it), fontSize = 12.sp, color = if ((counts[Filter.Need] ?: 0) > 0) Red else MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
-            },
+        ZendrTopBar(
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+            actions = { IconButton(onClick = onAbout) { Icon(Icons.Default.Info, "About") } },
         )
     }) { pad ->
         PullToRefreshBox(
@@ -404,6 +445,16 @@ fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onOpen:
             modifier = Modifier.fillMaxSize().padding(pad),
         ) {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Which computer, and who needs you there.
+                item {
+                    Column(Modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp)) {
+                        Text(computer?.name ?: "Computer", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            spaces?.let { summarize(it) } ?: if (error != null) "Not reachable right now" else "Connecting…",
+                            fontSize = 13.sp, color = if ((counts[Filter.Need] ?: 0) > 0) Red else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 if (all.isNotEmpty()) {
                     item {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
@@ -424,7 +475,6 @@ fun SessionsScreen(store: Store, computerId: String, onBack: () -> Unit, onOpen:
                         }
                     }
                 }
-                if (spaces == null && error == null) item { Text("Connecting…", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp)) }
                 spaces?.let { list ->
                     // Whoever needs you first, then the rest by space.
                     val waiting = all.filter { it.status == "blocked" }
