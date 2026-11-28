@@ -48,6 +48,8 @@ Zendr is a desktop app for Windows, built from **[Herdr](https://herdr.dev)**. I
 
 Not sure? **Settings → System → About → System type** says *x64-based PC* or *ARM-based PC*.
 
+The zips are built by GitHub Actions from this repository, not on anyone's computer. To check where one came from: `gh attestation verify Zendr-<version>-windows-x64.zip --repo ruchira-edirisinghe/zendr` names the commit and workflow that built it.
+
 </td></tr>
 <tr><td>
 
