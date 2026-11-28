@@ -337,6 +337,8 @@ Add as many computers as you like: pair each one the same way, and the app lists
 
 **Settings → Claude tools** and **Settings → Add-ons** offer 47 mods from the [Herdr gallery](https://herdr.dev/gallery/), made by people in the Herdr community. None is on when you install Zendr. Each card shows a picture, what it does, where it appears, what it needs (Node.js, Python 3, the GitHub CLI) and who made it. Search them, filter by on or off, topic and where they show, and flip a switch: the add-on appears at once, with no restart. Turning it off takes it out of the layout and deletes the copy; nothing else of yours is touched.
 
+**An add-on can do only what its card says.** Each card lists what the add-on may do: run programs, use the network, read your files, write files, or read and type into your terminals. Turning it on is your yes to that list, and Zendr refuses anything else: an add-on that doesn't list *read your files* can read only its own folder. Four add-ons ask for nothing. If an update asks for more, the card says what and waits for you to press **Allow**. `py scripts/addon_permissions.py --check` confirms each add-on's list covers what its code uses.
+
 Every add-on ships unchanged with its author's licence (`config/addons/<name>/LICENSE`) and a `NOTICE.md` naming its author and source. Only MIT and Apache-2.0 mods are included. On Windows, mods written for macOS and Linux get Git for Windows' Unix tools and the `py` launcher for `python3`.
 
 <details>
