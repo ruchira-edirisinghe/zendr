@@ -34,6 +34,31 @@ pub fn home() -> PathBuf {
     std::env::home_dir().unwrap_or_else(|| "/".into())
 }
 
+/// Claude Code's own folder: `$CLAUDE_CONFIG_DIR` when it is set, else `~/.claude`.
+pub fn claude_home() -> PathBuf {
+    claude_home_from(std::env::var_os("CLAUDE_CONFIG_DIR"), home())
+}
+
+fn claude_home_from(config_dir: Option<std::ffi::OsString>, home: PathBuf) -> PathBuf {
+    config_dir.filter(|d| !d.is_empty()).map(PathBuf::from).unwrap_or_else(|| home.join(".claude"))
+}
+
+/// Where Claude Code's session bridge keeps its files: `$CLAUDE_SESSION_BRIDGE_DIR`, else
+/// `session-bridge` in Claude Code's folder. Bridges that predate `CLAUDE_CONFIG_DIR`
+/// support still use `~/.claude/session-bridge`, so that one is used while only it exists.
+pub fn session_bridge_dir() -> PathBuf {
+    session_bridge_dir_from(std::env::var_os("CLAUDE_SESSION_BRIDGE_DIR"), claude_home(), home())
+}
+
+fn session_bridge_dir_from(bridge_dir: Option<std::ffi::OsString>, claude: PathBuf, home: PathBuf) -> PathBuf {
+    if let Some(dir) = bridge_dir.filter(|d| !d.is_empty()) {
+        return dir.into();
+    }
+    let preferred = claude.join("session-bridge");
+    let legacy = home.join(".claude").join("session-bridge");
+    if preferred != legacy && !preferred.exists() && legacy.exists() { legacy } else { preferred }
+}
+
 thread_local! {
     static CHECKING: Cell<bool> = const { Cell::new(false) };
 }
@@ -1237,6 +1262,8 @@ fn module(inst: Instance, copy: u64) -> HostModule {
         .function("checking", |_| Ok(HostValue::Bool(checking())))
         .function("home", |_| Ok(home().to_string_lossy().into_owned().into()))
         .function("appHome", |_| Ok(app_dir().to_string_lossy().into_owned().into()))
+        .function("claudeHome", |_| Ok(claude_home().to_string_lossy().into_owned().into()))
+        .function("sessionBridgeDir", |_| Ok(session_bridge_dir().to_string_lossy().into_owned().into()))
         .function("fonts", |_| Ok(to_host(&json!(*FONTS.lock().unwrap()))))
         .function("updates", |_| Ok(to_host(&crate::update::status())))
         .function("presentUpdateNotes", |a| {
@@ -1483,7 +1510,9 @@ fn capabilities() -> Capabilities {
 }
 
 fn capabilities_at(home: PathBuf, app: PathBuf, read_mods: bool) -> Capabilities {
-    let mut read_roots = vec![home];
+    // Claude Code's folder can live outside home (CLAUDE_CONFIG_DIR); the hub reads it.
+    let claude = claude_home();
+    let mut read_roots = if claude.starts_with(&home) { vec![home] } else { vec![home, claude] };
     if read_mods {
         read_roots.push(app.join("mods"));
     }
@@ -1602,6 +1631,31 @@ fn picked_files(paths: Option<Vec<PathBuf>>) -> gpui_shell::HostResult {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn claude_home_follows_claude_config_dir() {
+        let home = PathBuf::from("/home/me");
+        assert_eq!(claude_home_from(None, home.clone()), home.join(".claude"));
+        assert_eq!(claude_home_from(Some("".into()), home.clone()), home.join(".claude"));
+        assert_eq!(claude_home_from(Some("/cfg/claude".into()), home), PathBuf::from("/cfg/claude"));
+    }
+
+    #[test]
+    fn session_bridge_dir_prefers_the_override_then_claude_home() {
+        let tmp = std::env::temp_dir().join(format!("zendr-bridge-{}", std::process::id()));
+        let home = tmp.join("home");
+        let claude = tmp.join("cfg");
+        assert_eq!(session_bridge_dir_from(Some("/elsewhere".into()), claude.clone(), home.clone()), PathBuf::from("/elsewhere"));
+        // Neither exists yet: Claude Code's folder.
+        assert_eq!(session_bridge_dir_from(None, claude.clone(), home.clone()), claude.join("session-bridge"));
+        // Only the old bridge folder exists: keep using it.
+        std::fs::create_dir_all(home.join(".claude/session-bridge")).unwrap();
+        assert_eq!(session_bridge_dir_from(None, claude.clone(), home.clone()), home.join(".claude/session-bridge"));
+        // Once the bridge follows CLAUDE_CONFIG_DIR, that one wins.
+        std::fs::create_dir_all(claude.join("session-bridge")).unwrap();
+        assert_eq!(session_bridge_dir_from(None, claude.clone(), home), claude.join("session-bridge"));
+        let _ = std::fs::remove_dir_all(tmp);
+    }
+
     use super::*;
 
     #[test]

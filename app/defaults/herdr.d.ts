@@ -20,6 +20,11 @@ export function hc(args: string[]): Promise<ExecResult>;
 export function home(): string;
 /** The app's folder (`~/.config/herdr-app`, or `$HERDR_APP_HOME`): settings.json, keys.json, layouts/. */
 export function appHome(): string;
+/** Claude Code's folder: `$CLAUDE_CONFIG_DIR` when set, else `~/.claude`. */
+export function claudeHome(): string;
+/** Claude Code's session-bridge folder: `$CLAUDE_SESSION_BRIDGE_DIR`, else `session-bridge`
+ *  in `claudeHome()` (or `~/.claude/session-bridge` while only that one exists). */
+export function sessionBridgeDir(): string;
 /** True while `herdr-app check` loads this mod: `init()` runs for real there
  *  (exec and writeTextFile included), so guard process side effects. */
 export function checking(): boolean;
