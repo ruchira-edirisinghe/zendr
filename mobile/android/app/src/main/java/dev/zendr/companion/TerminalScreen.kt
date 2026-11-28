@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
@@ -64,6 +65,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
@@ -105,6 +107,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /** The keys along the bottom, as on a keyboard: what each says and what it presses. */
@@ -176,6 +179,53 @@ fun TerminalScreen(store: Store, s: Screen.Terminal, onBack: () -> Unit) {
     val plain = remember(lines) { lines.joinToString("\n") { it.text } }
     val choices = remember(plain, status) { if (status == "blocked") Choices.find(plain) else emptyList() }
 
+    // Reading back: while you're scrolled up the screen holds still (new output waits below), and
+    // earlier lines load as you near the top. Back at the bottom, or after you send something, it's
+    // live again.
+    var held by remember { mutableStateOf<List<AnnotatedString>?>(null) }
+    var heldAt by remember { mutableStateOf<ScreenText?>(null) }
+    var loadingEarlier by remember { mutableStateOf(false) }
+    var topNote by remember { mutableStateOf<String?>(null) }
+    val liveLines by rememberUpdatedState(lines)
+    val liveScreen by rememberUpdatedState(screen)
+    val shown = held ?: lines
+    val newOutput = held != null && screen != heldAt
+    LaunchedEffect(list) {
+        snapshotFlow { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < 24 }
+            .distinctUntilChanged()
+            .collect { bottom ->
+                if (bottom) {
+                    held = null; heldAt = null; topNote = null
+                } else if (held == null) {
+                    held = liveLines; heldAt = liveScreen
+                }
+            }
+    }
+    LaunchedEffect(list) {
+        snapshotFlow { (list.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) to list.layoutInfo.totalItemsCount }
+            .collect { (last, total) ->
+                val h = held ?: return@collect
+                if (topNote != null || total == 0 || last < total - 40) return@collect
+                val c = computer() ?: return@collect
+                loadingEarlier = true
+                runCatching { Api.screen(store, c, s.terminal, History.MOST) }
+                    .onSuccess { more ->
+                        val fetched = if (more.styled) Ansi.lines(more.text, more.palette ?: Palette.Default)
+                        else more.text.replace("\r\n", "\n").split('\n').map { AnnotatedString(it) }
+                        val n = History.earlier(fetched.map { it.text }, h.map { it.text })
+                        // Earlier lines go above (the list's far end), so what you're reading stays put.
+                        if (n != null && n > 0 && held === h) held = fetched.take(n) + h
+                        topNote = when {
+                            n == null -> "Earlier lines changed on the computer. Jump to the newest to see them."
+                            fetched.size >= History.MOST -> "That's the last ${"%,d".format(History.MOST)} lines."
+                            else -> "The start of this terminal."
+                        }
+                    }
+                    .onFailure { snack.showSnackbar(it.message ?: "Couldn't load earlier lines") }
+                loadingEarlier = false
+            }
+    }
+
     // Shells get suggestions from the computer's command history, as on the computer.
     val shell = s.app == null
     LaunchedEffect(input.text) {
@@ -193,6 +243,8 @@ fun TerminalScreen(store: Store, s: Screen.Terminal, onBack: () -> Unit) {
 
     fun act(block: suspend (Computer) -> Unit) {
         val c = computer() ?: return
+        // Pressing or sending something takes you back to the live screen.
+        scope.launch { list.scrollToItem(0) }
         scope.launch {
             runCatching { block(c) }.onFailure { snack.showSnackbar(it.message ?: "That didn't work") }
             runCatching { Api.screen(store, c, s.terminal) }.onSuccess { screen = it }
@@ -306,16 +358,35 @@ fun TerminalScreen(store: Store, s: Screen.Terminal, onBack: () -> Unit) {
                                 contentPadding = PaddingValues(10.dp),
                                 modifier = (if (wrap) Modifier.fillMaxWidth() else Modifier.width(with(density) { (lineWidthPx + 2 * padPx).toDp() })).fillMaxHeight(),
                             ) {
-                                items(lines.asReversed()) { line ->
+                                items(shown.asReversed()) { line ->
                                     Text(line.ifEmpty { AnnotatedString(" ") }, style = style, softWrap = wrap, maxLines = if (wrap) Int.MAX_VALUE else 1)
+                                }
+                                // At the top, while you read back.
+                                if (held != null && (loadingEarlier || topNote != null)) {
+                                    item {
+                                        Text(
+                                            if (loadingEarlier) "Loading earlier lines…" else topNote.orEmpty(),
+                                            color = palette.fg.copy(alpha = 0.6f), fontSize = 12.sp,
+                                            modifier = Modifier.padding(vertical = 8.dp),
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
                 androidx.compose.animation.AnimatedVisibility(!atBottom && screen != null, modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)) {
-                    SmallFloatingActionButton(onClick = { scope.launch { list.animateScrollToItem(0) } }) {
-                        Icon(Icons.Default.KeyboardArrowDown, "Jump to the newest")
+                    // Straight to the live screen (an animation through 2,000 lines takes too long).
+                    if (newOutput) {
+                        ExtendedFloatingActionButton(
+                            onClick = { scope.launch { list.scrollToItem(0) } },
+                            icon = { Icon(Icons.Default.KeyboardArrowDown, null) },
+                            text = { Text("New output") },
+                        )
+                    } else {
+                        SmallFloatingActionButton(onClick = { scope.launch { list.scrollToItem(0) } }) {
+                            Icon(Icons.Default.KeyboardArrowDown, "Jump to the newest")
+                        }
                     }
                 }
                 if (error != null && screen != null) {
