@@ -1202,6 +1202,54 @@ impl Vt {
         }
     }
 
+    /// The last `lines` rows of the screen, history included, as text with the SGR escapes
+    /// that colour and style it (the phone app shows a terminal with these). Rows the
+    /// terminal wrapped stay apart, so they line up at its width. Doesn't touch the render
+    /// state, so it's safe outside paint.
+    pub fn styled_text(&self, lines: usize) -> Option<String> {
+        let (mut total, mut cols) = (0usize, 0u16);
+        unsafe {
+            ghostty_terminal_get(self.term, GHOSTTY_TERMINAL_DATA_TOTAL_ROWS, &mut total as *mut _ as *mut c_void);
+            ghostty_terminal_get(self.term, GHOSTTY_TERMINAL_DATA_COLS, &mut cols as *mut _ as *mut c_void);
+        }
+        if total == 0 || cols == 0 {
+            return Some(String::new());
+        }
+        let first = total.saturating_sub(lines.max(1));
+        let start = self.grid_ref(GHOSTTY_POINT_TAG_SCREEN, 0, u32::try_from(first).ok()?)?;
+        let end = self.grid_ref(GHOSTTY_POINT_TAG_SCREEN, cols - 1, u32::try_from(total - 1).ok()?)?;
+        let selection = GhosttySelection { size: std::mem::size_of::<GhosttySelection>(), start, end, rectangle: false };
+        let mut extra = GhosttyFormatterTerminalExtra { size: std::mem::size_of::<GhosttyFormatterTerminalExtra>(), ..Default::default() };
+        extra.screen.size = std::mem::size_of::<GhosttyFormatterScreenExtra>();
+        let opts = GhosttyFormatterTerminalOptions {
+            size: std::mem::size_of::<GhosttyFormatterTerminalOptions>(),
+            emit: GHOSTTY_FORMATTER_FORMAT_VT,
+            unwrap: false,
+            trim: true,
+            extra,
+            selection: &selection,
+        };
+        unsafe {
+            let mut formatter: GhosttyFormatter = std::ptr::null_mut();
+            if ghostty_formatter_terminal_new(std::ptr::null(), &mut formatter, self.term, opts) != GHOSTTY_SUCCESS || formatter.is_null() {
+                return None;
+            }
+            let mut ptr: *mut u8 = std::ptr::null_mut();
+            let mut len = 0usize;
+            let result = ghostty_formatter_format_alloc(formatter, std::ptr::null(), &mut ptr, &mut len);
+            ghostty_formatter_free(formatter);
+            if result != GHOSTTY_SUCCESS {
+                return None;
+            }
+            if ptr.is_null() {
+                return Some(String::new());
+            }
+            let text = String::from_utf8_lossy(std::slice::from_raw_parts(ptr, len)).into_owned();
+            ghostty_free(std::ptr::null(), ptr, len);
+            Some(text)
+        }
+    }
+
     fn grid_ref(&self, tag: GhosttyPointTag, x: u16, y: u32) -> Option<GhosttyGridRef> {
         let mut r = GhosttyGridRef { size: std::mem::size_of::<GhosttyGridRef>(), ..Default::default() };
         let mut p = GhosttyPoint { tag, ..Default::default() };
@@ -2468,6 +2516,32 @@ mod tests {
         vt.write(b"\x1b[?1002h\x1b[?1006h");
         // Ghostty trusts the event's button even if this pane never saw a press.
         assert_eq!(vt.encode_mouse(GHOSTTY_MOUSE_ACTION_MOTION, Some(GHOSTTY_MOUSE_BUTTON_LEFT), 0, 35.0, 5.0, (80, 2, 10.0, 20.0), false), b"\x1b[<32;4;1M");
+    }
+
+    #[test]
+    fn styled_text_keeps_colours_and_takes_the_last_lines() {
+        let mut vt = Vt::new(12, 2);
+        vt.write(b"first\r\n\x1b[1;31mred\x1b[0m plain\r\nlast");
+        let plain = |s: &str| {
+            let (mut out, mut esc) = (String::new(), false);
+            for c in s.chars() {
+                if c == '\x1b' {
+                    esc = true;
+                } else if esc {
+                    esc = !c.is_ascii_alphabetic();
+                } else if c != '\r' {
+                    out.push(c);
+                }
+            }
+            out
+        };
+        let all = vt.styled_text(10).unwrap();
+        assert_eq!(plain(&all).trim_end(), "first\nred plain\nlast");
+        assert!(all.contains("\x1b[") && (all.contains("31") || all.contains("38;5;1")), "{all:?}");
+        // Only the last two rows: the first is in history by now.
+        assert_eq!(plain(&vt.styled_text(2).unwrap()).trim_end(), "red plain\nlast");
+        // Reading selects nothing.
+        assert_eq!(vt.selection_text(), None);
     }
 
     #[test]

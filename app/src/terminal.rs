@@ -855,6 +855,12 @@ impl TerminalView {
         self.grid.borrow().vt.selection_positions()
     }
 
+    /// The last `lines` rows with their colours as SGR escapes, and the terminal's size.
+    pub fn styled_screen(&self, lines: usize) -> Option<(String, u16, u16)> {
+        let g = self.grid.borrow();
+        g.vt.styled_text(lines).map(|text| (text, g.vt.cols, g.vt.rows))
+    }
+
     fn selection_changed(&mut self, cx: &mut Context<Self>) {
         let selection = self.selection();
         if selection != self.published_selection {
