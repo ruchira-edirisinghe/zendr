@@ -1,9 +1,12 @@
 package dev.zendr.companion
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -11,15 +14,23 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -30,12 +41,33 @@ val Green = Color(0xFF2FBF71)
 val Red = Color(0xFFE5534B)
 val Amber = Color(0xFFE0A030)
 
+/** Light, dark, or as the phone is set ("light", "dark", "system"), for the whole app. */
+object Appearance {
+    var theme by mutableStateOf("system")
+        private set
+
+    fun load(store: Store) { theme = store.theme }
+
+    fun set(store: Store, value: String) {
+        theme = value
+        store.theme = value
+    }
+}
+
 @Composable
-fun ZendrTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun isDark(theme: String = Appearance.theme): Boolean = when (theme) {
+    "light" -> false
+    "dark" -> true
+    else -> isSystemInDarkTheme()
+}
+
+@Composable
+fun ZendrTheme(theme: String = Appearance.theme, content: @Composable () -> Unit) {
+    val dark = isDark(theme)
     val scheme = if (dark) {
         darkColorScheme(
             primary = Green, onPrimary = Color(0xFF06210F),
+            primaryContainer = Color(0xFF1F5C3A), onPrimaryContainer = Color(0xFFC6F2D6),
             background = Color(0xFF15171A), surface = Color(0xFF15171A),
             surfaceVariant = Color(0xFF22252A), onSurfaceVariant = Color(0xFFB7BCC4),
             surfaceContainer = Color(0xFF1C1F23), surfaceContainerHigh = Color(0xFF24282D),
@@ -43,10 +75,16 @@ fun ZendrTheme(content: @Composable () -> Unit) {
             outlineVariant = Color(0xFF2E3238),
         )
     } else {
+        // Soft grey paper with white cards, the same green.
         lightColorScheme(
             primary = Color(0xFF1E8A50), onPrimary = Color.White,
-            surfaceVariant = Color(0xFFEDEFF2), surfaceContainer = Color(0xFFF3F4F6),
+            primaryContainer = Color(0xFFC9EFD8), onPrimaryContainer = Color(0xFF0B3B21),
+            background = Color(0xFFF4F5F7), onBackground = Color(0xFF16191D),
+            surface = Color(0xFFF4F5F7), onSurface = Color(0xFF16191D),
+            surfaceVariant = Color(0xFFE6E9ED), onSurfaceVariant = Color(0xFF59606A),
+            surfaceContainer = Color.White, surfaceContainerHigh = Color(0xFFFFFFFF), surfaceContainerHighest = Color(0xFFE9ECEF),
             secondaryContainer = Color(0xFFD5F2E1), onSecondaryContainer = Color(0xFF0B3B21),
+            outlineVariant = Color(0xFFDCE0E5),
         )
     }
     MaterialTheme(colorScheme = scheme) { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() } }
@@ -106,5 +144,39 @@ fun SpaceAvatar(name: String, size: Dp = 22.dp) {
     val tile = Color(palette[(name.hashCode() and 0x7fffffff) % palette.size])
     Box(Modifier.size(size).background(tile, RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) {
         Text(name.take(1).uppercase().ifEmpty { "·" }, color = Color.White, fontWeight = FontWeight.Bold, fontSize = (size.value * 0.55f).sp)
+    }
+}
+
+/** Zendr's iguana. */
+@Composable
+fun ZendrLogo(size: Dp, modifier: Modifier = Modifier) {
+    Image(painterResource(R.drawable.zendr_logo), null, modifier.size(size))
+}
+
+/** The app's own bar: the iguana and the name in the middle. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ZendrTopBar(navigationIcon: @Composable () -> Unit = {}, actions: @Composable RowScope.() -> Unit = {}) {
+    CenterAlignedTopAppBar(
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ZendrLogo(30.dp)
+                Spacer(Modifier.width(8.dp))
+                Text("Zendr", fontWeight = FontWeight.Bold, fontSize = 21.sp)
+            }
+        },
+        navigationIcon = navigationIcon,
+        actions = actions,
+    )
+}
+
+/** Flips between light and dark (from "as the phone is", whichever it isn't now). */
+@Composable
+fun ThemeButton(store: Store) {
+    val dark = isDark()
+    IconButton(onClick = { Appearance.set(store, if (dark) "light" else "dark") }) {
+        Crossfade(dark, label = "theme") { d ->
+            Icon(if (d) Glyphs.Sun else Glyphs.Moon, if (d) "Light mode" else "Dark mode")
+        }
     }
 }
