@@ -83,6 +83,7 @@ const CLAUDE_MARKET = "claude-mods";
 const CLAUDE_MARKET_URL = "https://github.com/ruchira-edirisinghe/claude-mods.git";
 const CLAUDE_MARKET_REF = "48c8af7a2593bbeb97c5b0d1f26a80ab88a4f423";
 const CLAUDE_MARKET_SOURCE = `${CLAUDE_MARKET_URL}#${CLAUDE_MARKET_REF}`;
+const sameRepo = (a, b) => String(a ?? "").toLowerCase().replace(/\.git$/, "").replace(/\/+$/, "") === b.toLowerCase().replace(/\.git$/, "");
 const DONE_WORDS = { "Turning off…": "Turned off", "Turning on…": "Turned on", "Installing…": "Installed", "Saving options…": "Saved" };
 const CLAUDE_MODS = [
   ["next-steps", "Next steps", "After each reply, suggested next steps as buttons above the prompt. Press 1 to 4 in an empty prompt box, or click one."],
@@ -849,6 +850,13 @@ export default class Settings extends View {
         : `Couldn't ask Claude Code: ${String(e?.message ?? e).slice(0, 300)}` };
       return;
     }
+    // Installed from Zendr's repo but not at the pinned commit (older Zendrs followed the branch).
+    let unpinned = null;
+    try {
+      const r = await exec("claude", ["plugin", "marketplace", "list", "--json"], { timeout: 60000 });
+      const m = JSON.parse(r.stdout.slice(r.stdout.indexOf("["))).find((x) => x.name === CLAUDE_MARKET);
+      if (m && m.source === "git" && sameRepo(m.url, CLAUDE_MARKET_URL) && m.ref !== CLAUDE_MARKET_REF) unpinned = m.ref || "its default branch";
+    } catch { /* nothing to offer */ }
     const plugins = {}, configs = {};
     for (const [name] of CLAUDE_MODS) {
       const p = list.find((x) => x.id === `${name}@${CLAUDE_MARKET}`);
@@ -861,7 +869,7 @@ export default class Settings extends View {
         if (c?.schema) configs[name] = { schema: c.schema, inputs: c.inputs ?? {} };
       } catch { /* its options stay hidden */ }
     }
-    this.claude = { plugins, configs, error: null };
+    this.claude = { plugins, configs, unpinned, error: null };
     for (const [name, c] of Object.entries(configs)) {
       for (const [key, field] of Object.entries(c.schema)) {
         if (field.type !== "string" || field.options) continue;
@@ -919,6 +927,41 @@ export default class Settings extends View {
     ], cx);
   }
 
+  // Moves an installed claude-mods from its branch to the pinned commit. Claude Code can't
+  // change a marketplace's source in place, so it's removed (which uninstalls its plugins)
+  // and added again; each plugin comes back on or off as it was, with its options.
+  pinClaudeMarket(cx) {
+    if (this.claudePinning) return;
+    const before = Object.entries(this.claude?.plugins ?? {}).map(([name, p]) => ({ name, id: p.id, enabled: p.enabled, inputs: { ...(this.claude.configs[name]?.inputs ?? {}) } }));
+    this.claudePinning = true;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const run = async (args, timeout = 180000) => {
+        const r = await exec("claude", args, { timeout });
+        if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n").slice(-3).join(" ") || `claude exited with ${r.code}`);
+      };
+      try {
+        await run(["plugin", "marketplace", "remove", CLAUDE_MARKET]);
+        await run(["plugin", "marketplace", "add", CLAUDE_MARKET_SOURCE]);
+        for (const p of before) {
+          await run(["plugin", "install", p.id, "--scope", "user"]);
+          const kept = Object.fromEntries(Object.entries(p.inputs).filter(([, v]) => v !== "" && v != null));
+          if (Object.keys(kept).length) {
+            const r = await claudeWithInput(["plugin", "configure", p.id, "--values-stdin"], JSON.stringify(kept));
+            if (r.code !== 0) notify({ title: `Couldn't restore ${p.name}'s options`, body: (r.stderr || r.stdout).trim().slice(0, 300), level: "error" });
+          }
+          if (!p.enabled) await run(["plugin", "disable", p.id, "--scope", "user"], 60000);
+        }
+        notify({ title: "Claude mods pinned", body: "They now come from a reviewed commit, not a branch. Restart running Claude sessions to use them." });
+      } catch (e) {
+        notify({ title: "Couldn't pin Claude mods", body: String(e?.message ?? e).slice(0, 400), level: "error" });
+      }
+      this.claudePinning = false;
+      await this.loadClaude();
+      cx.notify();
+    });
+  }
+
   configureClaude(name, values, cx) {
     const c = this.claude?.configs[name];
     if (c) Object.assign(c.inputs, values);
@@ -931,7 +974,10 @@ export default class Settings extends View {
       .child("Claude Code plugins that Zendr works with. They run inside Claude Code, in every session you start here or in another terminal. Changes reach new sessions; restart running ones.");
     if (!c) return v_flex().w_full().child(intro).child(div().py(12).text_size(13).text_color(t.dim).child("Asking Claude Code…"));
     if (c.error) return v_flex().w_full().child(intro).child(div().py(12).text_size(13).text_color(t.blocked).child(c.error));
-    return v_flex().w_full().child(intro).children(CLAUDE_MODS.map(([name, title, about]) => {
+    const pin = c.unpinned && this.row(t, "Pin Claude mods to a reviewed commit",
+      `They follow ${c.unpinned}, so any push to it changes what runs in your Claude Code. Pinning reinstalls them from the commit this Zendr was tested with, keeping each one on or off and its options.`,
+      this.button(t, "st-c-pin", this.claudePinning ? "Pinning…" : "Pin", (_e, cx) => this.pinClaudeMarket(cx)));
+    return v_flex().w_full().child(intro).when(Boolean(pin), (el) => el.child(pin)).children(CLAUDE_MODS.map(([name, title, about]) => {
       const p = c.plugins[name], busy = this.claudeBusy[name], cfg = c.configs[name];
       const done = this.claudeDone[name]?.until > Date.now() ? `${this.claudeDone[name].text} ✓` : null;
       const state = busy ?? done ?? (!p ? "Not installed" : p.enabled ? `On · v${p.version}` : `Off · v${p.version}`);
