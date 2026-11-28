@@ -316,6 +316,7 @@ The **Zendr app for Android** shows every session on your computers, says which 
 - **When an agent asks a question** (allow this command? 1. Yes 2. No), its choices are buttons.
 - **The key bar** has **Esc**, **Tab**, the arrows, **Enter** and **Ctrl+C**. Send with an empty box presses Enter.
 - **At a shell prompt**, the same command suggestions as on your computer show as you type. Tap one, or press → or Tab on a keyboard.
+- **The bell** at the top keeps a list of what happened: agents that needed you or finished, and new versions. A dot marks the ones you haven't seen. Tap one to open that session, swipe it away to remove it.
 - **Light or dark**: the moon and sun at the top left switch it, and **About** (ⓘ) can also follow your phone's setting.
 - **New versions** pop up by themselves with what's new and a **Download** button. **About** shows your version, checks for updates and links to the source, the releases and the issue tracker.
 
