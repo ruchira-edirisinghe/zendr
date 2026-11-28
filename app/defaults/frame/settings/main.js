@@ -66,6 +66,7 @@ const FEATURE_GROUPS = [
     ["pane_buttons", "Always show pane buttons", "Show a pane's header buttons all the time, not only when the pointer is over it.", true],
   ]],
   ["Warp-style tools", [
+    ["command_suggestions", "Command suggestions (→ or Tab)", "While you type at a shell prompt, the command you run most often that starts that way shows in grey after the cursor. Press → or Tab to use it. Learned from the commands you run, starting from your shell's history; Clear command suggestions in the command palette forgets them."],
     ["command_search", "Command search (Ctrl+Shift+R)", "Search your shell history and saved workflows, then paste one into the terminal or run it."],
     ["workflows", "Workflows", "Saved commands with {{placeholders}}, in Command search."],
     ["ai_command", "Ask AI for a command (Ctrl+Shift+Space)", "Describe what you want; Claude Code writes the command. Uses your Claude account."],

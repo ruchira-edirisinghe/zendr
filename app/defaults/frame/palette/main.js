@@ -47,6 +47,7 @@ const NAMED = [
   ["terminal.open", {}, "Terminal", "New terminal", "shell"],
   ["terminal.copy", {}, "Terminal", "Copy", "clipboard"],
   ["terminal.paste", {}, "Terminal", "Paste", "clipboard"],
+  ["suggestions.clear", {}, "Terminal", "Clear command suggestions", "history autosuggest forget warp"],
   ["agent.next", {}, "Agent", "Next agent", ""],
   ["agent.prev", {}, "Agent", "Previous agent", ""],
   ["window.minimize", {}, "Window", "Minimize window", ""],
