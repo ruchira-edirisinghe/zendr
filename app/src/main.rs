@@ -22,6 +22,7 @@ mod persist;
 mod macos;
 #[cfg(target_os = "macos")]
 mod macos_check;
+mod addon_grants;
 mod mods;
 mod mod_files;
 mod process_cwd;
