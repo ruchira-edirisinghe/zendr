@@ -7,7 +7,7 @@
 # `hc` exists. An hc that is already there is swapped the planned way (hc
 # update --from): running terminals keep running. No admin needed.
 # HC_VERSION=0.2.0 picks a version; HERDR_RELEASES_URL points elsewhere
-# (tests); HC_INSTALL_DIR installs elsewhere.
+# (tests); HC_INSTALL_DIR installs elsewhere; HC_NO_PATH=1 leaves your PATH alone.
 #
 # `-File install.ps1 <release zip> [session]` installs from a zip already
 # here, checked by whoever put it here, and removes both files after
@@ -89,6 +89,9 @@ try {
     }
 
     # The raw user PATH, so %VARIABLES% in it stay unexpanded and keep their type.
+    if ($env:HC_NO_PATH -eq "1") {
+        Write-Host "Left your PATH alone (HC_NO_PATH): hc is $dir\hc.exe."
+    } else {
     $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
     $raw = [string]$key.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
     $listed = $raw -split ";" | Where-Object { $_.Trim().TrimEnd("\") -ieq $dir.TrimEnd("\") }
@@ -101,6 +104,7 @@ try {
         Write-Host "Added $dir to your PATH: new terminals have hc."
     }
     $key.Close()
+    }
     if (($env:Path -split ";") -notcontains $dir) { $env:Path += ";$dir" }
     Write-Host "Agents: hc --skill. People: hc --help."
 } finally {
