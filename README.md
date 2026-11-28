@@ -304,7 +304,13 @@ Right-click a session, a tab or a hub card, or press <kbd>Ctrl</kbd> <kbd>Shift<
 
 ### Zendr on your phone
 
-The **Zendr app for Android** shows every session on your computers, says which ones need you, and lets you answer from anywhere: read the agent's screen, type a reply, or tap a key (**1**, **2**, **Enter**, **Esc**, **Ctrl+C**). Turn on **Alert me** and your phone buzzes when an agent needs you or finishes, even with the app closed.
+The **Zendr app for Android** shows every session on your computers, says which ones need you, and lets you answer from anywhere. Turn on **Alert me** and your phone buzzes when an agent needs you or finishes, even with the app closed. A tap on the alert opens that session.
+
+- **Sessions** are grouped by space, with the ones that need you at the top. Filter them by *Needs you*, *Working* or *Done*, and pull down to refresh.
+- **The terminal** shows the agent's screen in your computer's colours, sized to fit your phone's width. Pinch to zoom, or turn on *Wrap long lines*. It stays at the newest line, with a button to jump back down.
+- **When an agent asks a question** (allow this command? 1. Yes 2. No), its choices are buttons.
+- **The key bar** has **Esc**, **Tab**, the arrows, **Enter** and **Ctrl+C**. Send with an empty box presses Enter.
+- **At a shell prompt**, the same command suggestions as on your computer show as you type. Tap one, or press → or Tab on a keyboard.
 
 Your phone reaches your computer through [Tailscale](https://tailscale.com), a free private network that encrypts everything, so nothing on your computer is opened to the internet.
 
