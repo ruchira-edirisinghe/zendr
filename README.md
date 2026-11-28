@@ -331,7 +331,7 @@ flowchart LR
 3. On your computer, open **Settings → Phone → Show pairing code**.
 4. In the app, tap **Add computer → Scan the code**. The 6-letter code under the QR code shows on both screens; they should match.
 
-Add as many computers as you like: pair each one the same way, and the app lists them all with how many sessions need you on each. **Unpair all phones** (on the computer) makes a new code, and phones paired with the old one stop working. The phone connection is off until you show a pairing code, answers only over Tailscale unless you choose **Allow local network**, and **Turn off** stops it.
+Add as many computers as you like: pair each one the same way, and the app lists them all with how many sessions need you on each. **Unpair all phones** (on the computer) makes a new code, and phones paired with the old one stop working. The phone connection is off until you show a pairing code, and **Turn off** stops it. It listens only on your computer's Tailscale address (and its local network address if you choose **Allow local network**), and answers only devices on your own tailnet. The pairing token is stored encrypted for your Windows account, and only Settings → Phone can show the code: other mods can't ask for it.
 
 ### Community add-ons, off until you want them
 
