@@ -93,6 +93,16 @@ class Store(context: Context) {
     var alerts: Boolean
         get() = prefs.getBoolean("alerts", false)
         set(v) = prefs.edit().putBoolean("alerts", v).apply()
+
+    /** The terminal's text size in sp; 0 fits the computer's terminal to the phone's width. */
+    var textSize: Float
+        get() = prefs.getFloat("textSize", 0f)
+        set(v) = prefs.edit().putFloat("textSize", v).apply()
+
+    /** Long lines wrap to the phone's width instead of scrolling sideways. */
+    var wrap: Boolean
+        get() = prefs.getBoolean("wrap", false)
+        set(v) = prefs.edit().putBoolean("wrap", v).apply()
 }
 
 class ApiError(message: String, val unpaired: Boolean = false) : Exception(message)
@@ -164,8 +174,33 @@ object Api {
     suspend fun read(store: Store?, c: Computer, terminal: String, lines: Int = 120): String =
         call(store, c, "GET", "/api/read?terminal=${URLEncoder.encode(terminal, "UTF-8")}&lines=$lines").optString("text")
 
-    suspend fun send(store: Store?, c: Computer, terminal: String, text: String) =
-        call(store, c, "POST", "/api/send", JSONObject().put("terminal", terminal).put("text", text))
+    /**
+     * A terminal's screen and recent history. A computer that can (Zendr 0.3 and later) sends it
+     * with its colours and its theme; an older one, plain text.
+     */
+    suspend fun screen(store: Store?, c: Computer, terminal: String, lines: Int = 300): ScreenText {
+        val j = call(store, c, "GET", "/api/read?terminal=${URLEncoder.encode(terminal, "UTF-8")}&lines=$lines&styled=1")
+        return ScreenText(
+            text = j.optString("text"),
+            styled = j.optBoolean("styled", false),
+            cols = j.optInt("cols", 0),
+            palette = Palette.fromJson(j.optJSONObject("palette")),
+        )
+    }
+
+    /** Commands from the computer's history that start with [prefix], best first (none from older ones). */
+    suspend fun suggest(store: Store?, c: Computer, prefix: String, limit: Int = 3): List<String> {
+        if (prefix.isBlank()) return emptyList()
+        val j = runCatching {
+            call(store, c, "GET", "/api/suggest?prefix=${URLEncoder.encode(prefix, "UTF-8")}&limit=$limit")
+        }.getOrNull() ?: return emptyList()
+        val a = j.optJSONArray("suggestions") ?: return emptyList()
+        return (0 until a.length()).map { a.optString(it) }.filter { it.length > prefix.length && it.startsWith(prefix) }
+    }
+
+    /** Types [text] and presses Enter; [force] answers even an agent that's waiting on you. */
+    suspend fun send(store: Store?, c: Computer, terminal: String, text: String, force: Boolean = false) =
+        call(store, c, "POST", "/api/send", JSONObject().put("terminal", terminal).put("text", text).put("force", force))
 
     suspend fun keys(store: Store?, c: Computer, terminal: String, keys: List<String>) =
         call(store, c, "POST", "/api/keys", JSONObject().put("terminal", terminal).put("keys", JSONArray(keys)))
@@ -184,6 +219,9 @@ data class Session(
 )
 
 data class Space(val id: String, val name: String, val sessions: List<Session>)
+
+/** What `/api/read` sent: the text (with colour escapes when [styled]), how wide the terminal is. */
+data class ScreenText(val text: String, val styled: Boolean, val cols: Int, val palette: Palette?)
 
 private val APP_NAMES = mapOf(
     "claude-code" to "Claude Code", "codex" to "Codex", "gemini" to "Gemini", "opencode" to "opencode",
