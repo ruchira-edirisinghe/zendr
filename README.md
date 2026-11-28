@@ -72,6 +72,8 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 You don't need admin rights. Zendr opens when it's done.
 
+Add `-NoPath` to leave your PATH alone. Zendr still finds its core, but `zendr` and `hc` then only run by their full path.
+
 </td></tr>
 <tr><td>
 
