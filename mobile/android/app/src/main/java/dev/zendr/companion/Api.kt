@@ -130,7 +130,28 @@ class Store(context: Context) {
         set(v) = prefs.edit().putString("skipVersion", v).apply()
 }
 
-class ApiError(message: String, val unpaired: Boolean = false) : Exception(message)
+/** What kind of trouble reaching a computer is: each has its own screen and way out. */
+enum class Problem {
+    /** No address answered: Tailscale off on one side, the computer asleep, Zendr closed. */
+    Offline,
+    /** The computer has a new pairing code, so this phone's token stopped working. */
+    Unpaired,
+    /** The session isn't there any more. */
+    Gone,
+    /** Zendr on the computer doesn't know what the app asked: it's older than the app. */
+    Outdated,
+    /** Zendr answered with an error of its own. */
+    Server,
+    /** The computer isn't paired with this phone (forgotten since). */
+    Missing,
+}
+
+class ApiError(message: String, val kind: Problem = Problem.Server) : Exception(message) {
+    val unpaired get() = kind == Problem.Unpaired
+}
+
+/** The kind of trouble behind a failed call (anything but the computer's own answer is offline). */
+fun Throwable.problem(): Problem = (this as? ApiError)?.kind ?: Problem.Offline
 
 object Api {
     /** Calls the computer, trying the address that worked last, then each of the others. */
@@ -154,7 +175,7 @@ object Api {
                 // Not this address: try the next.
             }
         }
-        throw ApiError(refused ?: "Can't reach ${c.name}. Check that Zendr is open there and Tailscale is on here.")
+        throw ApiError(refused ?: "Can't reach ${c.name}. Check that Zendr is open there and Tailscale is on here.", Problem.Offline)
     }
 
     private class Refused(message: String) : IOException(message)
@@ -177,10 +198,14 @@ object Api {
             val text = (if (code < 400) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
             val json = runCatching { JSONObject(text) }.getOrDefault(JSONObject())
             when {
-                code == 401 -> throw ApiError("This phone isn't paired with it any more. Scan its code again.", unpaired = true)
+                code == 401 -> throw ApiError("This phone isn't paired with it any more. Scan its code again.", Problem.Unpaired)
                 // Answered only over Tailscale: another address may work.
                 code == 403 -> throw Refused(errorText(json) ?: "That computer only answers over Tailscale.")
-                code >= 400 -> throw ApiError(errorText(json) ?: "The computer said: error $code")
+                code == 404 -> throw ApiError("Zendr on the computer is older than this app. Update it there.", Problem.Outdated)
+                code >= 400 -> {
+                    val said = errorText(json) ?: "The computer said: error $code"
+                    throw ApiError(said, if (said.contains("no terminal", ignoreCase = true)) Problem.Gone else Problem.Server)
+                }
             }
             return json
         } finally {
