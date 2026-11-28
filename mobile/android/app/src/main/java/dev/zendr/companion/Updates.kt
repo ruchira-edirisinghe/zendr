@@ -129,7 +129,10 @@ object Updates {
             val r = fetch()
             store.updateCheckedAt = System.currentTimeMillis()
             latest = r
-            if (newer(r.version, installed(context)) && (manual || r.version != store.skipVersion)) offer = r
+            if (newer(r.version, installed(context))) {
+                Feed.noteUpdate(store, r)
+                if (manual || r.version != store.skipVersion) offer = r
+            }
         } catch (e: Exception) {
             error = if (e is IOException && e.message?.startsWith("GitHub") == true) e.message
             else "Couldn't reach GitHub. Check your internet connection."
