@@ -2,7 +2,8 @@
 // ships switched off. Each lives in addons/<id>/ (its mods, the author's LICENSE, a NOTICE
 // and a preview), listed in addons/catalog.json. Turning one on copies its mods into mods/
 // and shows it (mod.dock); turning it off takes it out of the layout and deletes the copy.
-// settings.json `addons.<id>: true` remembers which are on.
+// settings.json `addons.<id>: true` remembers which are on, and `addon_permissions.<id>` what
+// the person let it do when they turned it on: an add-on gets only that (src/addon_grants.rs).
 
 import { div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
@@ -19,6 +20,16 @@ const WHERE = {
   pane: "Opens beside the terminal you're in",
   place: "Sits along the edge of the window",
 };
+
+// What an add-on may do (catalog.json `permissions`), in words.
+const PERMS = {
+  exec: "run programs",
+  network: "use the network",
+  read: "read your files",
+  write: "write files",
+  terminals: "read and type into your terminals",
+};
+const words = (list) => list.map((p) => PERMS[p] ?? p).join(", ");
 
 const windows = () => window()?.platform === "windows";
 const native = (p) => (windows() ? p.replace(/\//g, "\\") : p);
@@ -72,9 +83,35 @@ export const addonMethods = {
       await copyDir(`${home}/addons/${a.id}/mods/${m}`, to);
       await writeTextFile(`${to}/${MARK}`, `${a.id}\n`);
     }
+    this.showAddon(a);
+  },
+
+  showAddon(a) {
     if (a.show === "side") run("mod.dock", { name: a.id, into: "side" });
     else if (a.show === "status") run("mod.dock", { name: a.id, into: "status", size: a.size ?? 320 });
     else if (a.show === "place") run("mod.dock", { name: a.id });
+  },
+
+  // What it may do now, and what it asks for beyond that (an update that needs more).
+  addonGrant(a) {
+    const declared = a.permissions ?? [];
+    const allowed = this.person.addon_permissions?.[a.id] ?? declared;
+    return { declared, allowed: declared.filter((p) => allowed.includes(p)), more: declared.filter((p) => !allowed.includes(p)) };
+  },
+
+  // Lets an add-on do what it now asks for, and loads it again so that applies.
+  allowAddon(a, cx) {
+    cx.spawn(async (cx) => {
+      const failed = await this.save((p) => {
+        p.addon_permissions = { ...(p.addon_permissions ?? {}), [a.id]: [...(a.permissions ?? [])] };
+      });
+      if (failed) notify({ ...failed, level: "error" });
+      else {
+        for (const m of a.mods) run("mod.undock", { name: m });
+        this.showAddon(a);
+      }
+      cx.notify();
+    });
   },
 
   async disableAddon(a) {
@@ -97,8 +134,10 @@ export const addonMethods = {
         else await this.disableAddon(a);
         const failed = await this.save((p) => {
           p.addons = { ...(p.addons ?? {}) };
-          if (on) p.addons[a.id] = true;
-          else delete p.addons[a.id];
+          p.addon_permissions = { ...(p.addon_permissions ?? {}) };
+          // Turning it on, with what it may do on the card, is the person's yes to that.
+          if (on) { p.addons[a.id] = true; p.addon_permissions[a.id] = [...(a.permissions ?? [])]; }
+          else { delete p.addons[a.id]; delete p.addon_permissions[a.id]; }
         });
         if (failed) notify({ ...failed, level: "error" });
       } catch (e) {
@@ -118,7 +157,7 @@ export const addonMethods = {
 
   // One add-on: its preview, what it does, who made it, and its switch.
   addonCard(t, a) {
-    const on = this.addonOn(a), busy = this.addonBusy[a.id];
+    const on = this.addonOn(a), busy = this.addonBusy[a.id], grant = this.addonGrant(a);
     const canOpen = on && !busy && ["open", "side", "tab", "pane"].includes(a.show);
     const link = (id, label, url) => div().id(id).text_size(12).text_color(t.accent).cursor_pointer().hover((s) => s.underline()).on_click(() => openLink(url)).child(label);
     return h_flex().w_full().gap(14).py(14).items_start().border_b(1).border_color(t.border)
@@ -131,6 +170,11 @@ export const addonMethods = {
         .child(div().text_size(12.5).line_height("18px").text_color(t.muted).child(a.about))
         .child(div().text_size(11.5).text_color(t.dim).child(WHERE[a.show] ?? ""))
         .when(Boolean(a.needs), (el) => el.child(div().text_size(11.5).text_color(t.dim).child(`Needs ${a.needs}.`)))
+        .child(div().text_size(11.5).line_height("16px").text_color(t.dim)
+          .child(grant.declared.length ? `${on ? "May" : "Will be able to"} ${words(on ? grant.allowed : grant.declared)}.` : "Asks for no special access."))
+        .when(on && grant.more.length > 0, (el) => el.child(h_flex().gap(10).items_center()
+          .child(div().text_size(11.5).text_color(t.blocked).child(`This version also asks to ${words(grant.more)}.`))
+          .child(this.button(t, `st-a-allow-${a.id}`, "Allow", (_e, cx) => this.allowAddon(a, cx)))))
         .child(h_flex().gap(12).items_center().pt(2)
           .child(div().text_size(12).text_color(t.dim).child(`By ${a.author} · ${a.license}`))
           .child(link(`st-a-repo-${a.id}`, "Source", a.repo))
