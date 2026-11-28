@@ -2,10 +2,13 @@
 //!
 //! Off until `remote.pair`, which turns it on and returns what the phone scans. Plain HTTP and
 //! JSON on one port (7425 unless remote.json says otherwise). Every request carries the pairing
-//! token, and only Tailscale addresses (100.64.0.0/10, fd7a:115c:a1e0::/48) and this computer are
-//! answered, unless `lan` is on: Tailscale encrypts the way there, a home network doesn't.
-//! remote.json in the app's folder holds the switch, the port and the token; a new token
-//! (`remote.pair` with `reset`) unpairs every phone.
+//! token. It listens only on this computer's Tailscale addresses and on 127.0.0.1 (and on its
+//! local network address when `lan` is on: Tailscale encrypts the way there, a home network
+//! doesn't), and answers only devices on this tailnet, not every 100.64.0.0/10 address
+//! (carrier-grade NAT uses that range too). remote.json in the app's folder holds the switch,
+//! the port and the token, the token encrypted for this account on Windows (DPAPI) and the file
+//! readable only by this account elsewhere; a new token (`remote.pair` with `reset`) unpairs
+//! every phone. Only Settings → Phone sees the pairing link: it isn't in shared state.
 //!
 //!   GET  /api/hello                       this computer: name, OS, version
 //!   GET  /api/state                       spaces, tabs and terminals with their state (`herdr-app ls`)
@@ -20,19 +23,21 @@ use crate::mods::{self, Request};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream};
+use std::collections::HashSet;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const DEFAULT_PORT: u16 = 7425;
 const MAX_HEAD: usize = 16 * 1024;
 const MAX_BODY: usize = 256 * 1024;
+/// How often the server looks for new addresses to listen on (Tailscale starting after Zendr).
+const REBIND_EVERY: Duration = Duration::from_secs(15);
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[derive(Clone, Debug, Default)]
 pub struct Config {
     pub enabled: bool,
     pub port: u16,
@@ -41,9 +46,26 @@ pub struct Config {
     pub lan: bool,
 }
 
+/// remote.json as written: the token is a password, so on Windows only its DPAPI-encrypted
+/// form (for this account) is kept; older files' plain `token` is read and replaced.
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct Disk {
+    enabled: bool,
+    port: u16,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    token: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    token_protected: String,
+    lan: bool,
+}
+
 struct Running {
     port: u16,
+    lan: bool,
     stop: Arc<AtomicBool>,
+    /// Where it listens, to wake each accept loop when it stops.
+    bound: Arc<Mutex<Vec<SocketAddr>>>,
 }
 
 fn running() -> &'static Mutex<Option<Running>> {
@@ -56,16 +78,31 @@ fn config_path() -> PathBuf {
 }
 
 pub fn load() -> Config {
-    let mut c: Config = std::fs::read_to_string(config_path()).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let disk: Disk = std::fs::read_to_string(config_path()).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let token = if disk.token_protected.is_empty() { disk.token.clone() } else { unprotect(&disk.token_protected).unwrap_or_default() };
+    let mut c = Config { enabled: disk.enabled, port: disk.port, token, lan: disk.lan };
     if c.port == 0 {
         c.port = DEFAULT_PORT;
+    }
+    // A token an older Zendr wrote in the clear is encrypted now.
+    if !disk.token.is_empty() && protect("probe").is_some() {
+        if let Err(e) = save(&c) {
+            tracing::warn!("phone server: {e}");
+        }
     }
     c
 }
 
 fn save(c: &Config) -> Result<(), String> {
     let path = config_path();
-    let body = serde_json::to_string_pretty(c).map_err(|e| e.to_string())?;
+    let mut disk = Disk { enabled: c.enabled, port: c.port, lan: c.lan, ..Default::default() };
+    if !c.token.is_empty() {
+        match protect(&c.token) {
+            Some(sealed) => disk.token_protected = sealed,
+            None => disk.token = c.token.clone(),
+        }
+    }
+    let body = serde_json::to_string_pretty(&disk).map_err(|e| e.to_string())?;
     std::fs::write(&path, body + "\n").map_err(|e| format!("cannot write {}: {e}", path.display()))?;
     // The token is a password: only this account reads it.
     #[cfg(unix)]
@@ -76,8 +113,57 @@ fn save(c: &Config) -> Result<(), String> {
     Ok(())
 }
 
+/// The token encrypted for this Windows account (DPAPI), as hex; None where there's no DPAPI.
+#[cfg(windows)]
+fn protect(secret: &str) -> Option<String> {
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData};
+    let input = CRYPT_INTEGER_BLOB { cbData: u32::try_from(secret.len()).ok()?, pbData: secret.as_ptr().cast_mut() };
+    let mut out = CRYPT_INTEGER_BLOB::default();
+    // SAFETY: input points at `secret` for its length; DPAPI only reads it. On success `out`
+    // holds a LocalAlloc'd buffer of cbData bytes, freed below.
+    unsafe {
+        if CryptProtectData(&input, std::ptr::null(), std::ptr::null(), std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut out) == 0 {
+            return None;
+        }
+        let hex = std::slice::from_raw_parts(out.pbData, out.cbData as usize).iter().map(|b| format!("{b:02x}")).collect();
+        LocalFree(out.pbData.cast());
+        Some(hex)
+    }
+}
+
+#[cfg(windows)]
+fn unprotect(hex: &str) -> Option<String> {
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptUnprotectData};
+    let mut sealed = (0..hex.len()).step_by(2).map(|i| hex.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok())).collect::<Option<Vec<u8>>>()?;
+    let input = CRYPT_INTEGER_BLOB { cbData: u32::try_from(sealed.len()).ok()?, pbData: sealed.as_mut_ptr() };
+    let mut out = CRYPT_INTEGER_BLOB::default();
+    // SAFETY: as in protect().
+    unsafe {
+        if CryptUnprotectData(&input, std::ptr::null_mut(), std::ptr::null(), std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut out) == 0 {
+            return None;
+        }
+        let secret = String::from_utf8(std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec()).ok();
+        LocalFree(out.pbData.cast());
+        secret
+    }
+}
+
+#[cfg(not(windows))]
+fn protect(_secret: &str) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+fn unprotect(_sealed: &str) -> Option<String> {
+    None
+}
+
 /// At launch: serve again when it was on.
 pub fn start_saved() {
+    // Older Zendrs kept the pairing link, token included, in shared state (shared.json).
+    mods::set_shared("remote.pairing".into(), Value::Null);
     let c = load();
     if c.enabled && !c.token.is_empty() {
         if let Err(e) = start(&c) {
@@ -86,23 +172,72 @@ pub fn start_saved() {
     }
 }
 
+/// Where to listen: this computer, its Tailscale addresses, and with `lan` its local address.
+fn addresses(lan: bool) -> Vec<IpAddr> {
+    let mut out = vec![IpAddr::V4(Ipv4Addr::LOCALHOST)];
+    out.extend(tailnet().me.iter().copied());
+    if lan {
+        out.extend(lan_ip().and_then(|ip| ip.parse::<IpAddr>().ok()));
+    }
+    out
+}
+
 fn start(c: &Config) -> Result<(), String> {
     let mut slot = running().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(r) = slot.as_ref() {
-        if r.port == c.port {
+        if (r.port, r.lan) == (c.port, c.lan) {
             return Ok(());
         }
         stop_running(&mut slot);
     }
-    let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, c.port)))
-        .map_err(|e| format!("cannot listen on port {}: {e}", c.port))?;
+    // This computer's own address first, so a taken port is said at once.
+    let local = SocketAddr::from((Ipv4Addr::LOCALHOST, c.port));
+    let listener = TcpListener::bind(local).map_err(|e| format!("cannot listen on port {}: {e}", c.port))?;
     let stop = Arc::new(AtomicBool::new(false));
-    let flag = stop.clone();
+    let bound = Arc::new(Mutex::new(vec![local]));
+    accept(listener, stop.clone())?;
+    let (port, lan, flag, list) = (c.port, c.lan, stop.clone(), bound.clone());
+    std::thread::Builder::new()
+        .name("zendr-phone-addresses".into())
+        .spawn(move || {
+            let mut warned = HashSet::new();
+            while !flag.load(Ordering::Relaxed) {
+                for ip in addresses(lan) {
+                    let addr = SocketAddr::new(ip, port);
+                    if list.lock().unwrap_or_else(std::sync::PoisonError::into_inner).contains(&addr) {
+                        continue;
+                    }
+                    match TcpListener::bind(addr) {
+                        Ok(l) => {
+                            if accept(l, flag.clone()).is_ok() {
+                                list.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(addr);
+                            }
+                        }
+                        Err(e) => {
+                            if warned.insert(addr) {
+                                tracing::warn!("phone server: cannot listen on {addr}: {e}");
+                            }
+                        }
+                    }
+                }
+                let until = Instant::now() + REBIND_EVERY;
+                while Instant::now() < until && !flag.load(Ordering::Relaxed) {
+                    std::thread::sleep(Duration::from_millis(250));
+                }
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    *slot = Some(Running { port: c.port, lan: c.lan, stop, bound });
+    Ok(())
+}
+
+/// Answers connections on `listener` until `stop`.
+fn accept(listener: TcpListener, stop: Arc<AtomicBool>) -> Result<(), String> {
     std::thread::Builder::new()
         .name("zendr-phone".into())
         .spawn(move || {
             for stream in listener.incoming() {
-                if flag.load(Ordering::Relaxed) {
+                if stop.load(Ordering::Relaxed) {
                     break;
                 }
                 let Ok(stream) = stream else { continue };
@@ -110,16 +245,17 @@ fn start(c: &Config) -> Result<(), String> {
                 let _ = std::thread::Builder::new().name("zendr-phone-request".into()).spawn(move || handle(stream, &load()));
             }
         })
-        .map_err(|e| e.to_string())?;
-    *slot = Some(Running { port: c.port, stop });
-    Ok(())
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 fn stop_running(slot: &mut Option<Running>) {
     if let Some(r) = slot.take() {
         r.stop.store(true, Ordering::Relaxed);
-        // Wake the accept loop so it sees the flag and lets the port go.
-        let _ = TcpStream::connect_timeout(&SocketAddr::from((Ipv4Addr::LOCALHOST, r.port)), Duration::from_millis(300));
+        // Wake each accept loop so it sees the flag and lets its address go.
+        for addr in r.bound.lock().unwrap_or_else(std::sync::PoisonError::into_inner).iter() {
+            let _ = TcpStream::connect_timeout(addr, Duration::from_millis(300));
+        }
     }
 }
 
@@ -139,7 +275,7 @@ pub fn pair(args: &Value) -> Result<Value, String> {
     c.enabled = true;
     save(&c)?;
     start(&c)?;
-    let ts = tailscale();
+    let ts = tailnet_within(Duration::ZERO);
     let mut hosts: Vec<String> = Vec::new();
     hosts.extend(ts.dns.clone());
     hosts.extend(ts.ips.clone());
@@ -164,12 +300,26 @@ pub fn pair(args: &Value) -> Result<Value, String> {
     let out = json!({
         "ok": true, "link": link, "qr": rows, "name": name, "port": c.port, "lan": c.lan,
         "hosts": hosts, "code": short_code(&c.token),
-        "tailscale": { "installed": ts.installed, "online": ts.online, "dns": ts.dns, "ips": ts.ips },
+        "tailscale": { "installed": ts.installed, "online": ts.online, "dns": ts.dns.clone(), "ips": ts.ips.clone() },
     });
-    // Settings → Phone reads it from here: a mod's run() gets no reply.
-    mods::set_shared("remote.pairing".into(), out.clone());
+    // Settings → Phone reads it with phonePairing() (a mod's run() gets no reply). Not in
+    // shared state, which every mod reads and shared.json keeps.
+    *last_pairing().lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(out.clone());
+    PAIRINGS.fetch_add(1, Ordering::Relaxed);
     publish_status();
     Ok(out)
+}
+
+static PAIRINGS: AtomicU64 = AtomicU64::new(0);
+
+fn last_pairing() -> &'static Mutex<Option<Value>> {
+    static P: OnceLock<Mutex<Option<Value>>> = OnceLock::new();
+    P.get_or_init(|| Mutex::new(None))
+}
+
+/// What the last `remote.pair` returned while the server is on, for Settings → Phone only.
+pub fn pairing() -> Value {
+    last_pairing().lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone().unwrap_or(Value::Null)
 }
 
 /// `remote.stop`: no more answers; paired phones keep their token for when it's on again.
@@ -178,7 +328,8 @@ pub fn stop() -> Result<Value, String> {
     c.enabled = false;
     save(&c)?;
     stop_running(&mut running().lock().unwrap_or_else(std::sync::PoisonError::into_inner));
-    mods::set_shared("remote.pairing".into(), Value::Null);
+    last_pairing().lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+    PAIRINGS.fetch_add(1, Ordering::Relaxed);
     publish_status();
     Ok(json!({ "ok": true }))
 }
@@ -187,7 +338,8 @@ pub fn stop() -> Result<Value, String> {
 pub fn status() -> Value {
     let c = load();
     let on = running().lock().unwrap_or_else(std::sync::PoisonError::into_inner).is_some();
-    json!({ "enabled": c.enabled, "running": on, "port": c.port, "lan": c.lan, "paired": !c.token.is_empty() })
+    // `pairing` changes with each pairing code, so Settings → Phone shows the new one.
+    json!({ "enabled": c.enabled, "running": on, "port": c.port, "lan": c.lan, "paired": !c.token.is_empty(), "pairing": PAIRINGS.load(Ordering::Relaxed) })
 }
 
 /// The status where mods read it (shared `remote.status`).
@@ -256,6 +408,36 @@ struct Tailscale {
     online: bool,
     dns: Option<String>,
     ips: Vec<String>,
+    /// This computer's Tailscale addresses, IPv6 too.
+    me: Vec<IpAddr>,
+    /// Every device on this tailnet, this computer included.
+    members: HashSet<IpAddr>,
+}
+
+fn tailscale_ips(node: &Value) -> impl Iterator<Item = IpAddr> + '_ {
+    node["TailscaleIPs"].as_array().into_iter().flatten().filter_map(Value::as_str).filter_map(|ip| ip.parse().ok())
+}
+
+/// This computer's tailnet, asked of Tailscale at most every `max_age`.
+fn tailnet_within(max_age: Duration) -> Arc<Tailscale> {
+    static CACHE: Mutex<Option<(Instant, Arc<Tailscale>)>> = Mutex::new(None);
+    let mut cache = CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((_, t)) = cache.as_ref().filter(|(at, _)| at.elapsed() < max_age) {
+        return t.clone();
+    }
+    let t = Arc::new(tailscale());
+    *cache = Some((Instant::now(), t.clone()));
+    t
+}
+
+fn tailnet() -> Arc<Tailscale> {
+    tailnet_within(REBIND_EVERY)
+}
+
+/// Whether `ip` is a device on this tailnet. An address it doesn't know asks Tailscale again,
+/// at most every few seconds, so a phone that just joined gets in.
+fn tailnet_member(ip: IpAddr) -> bool {
+    tailnet().members.contains(&ip) || tailnet_within(Duration::from_secs(3)).members.contains(&ip)
 }
 
 fn tailscale() -> Tailscale {
@@ -272,14 +454,17 @@ fn tailscale() -> Tailscale {
         let me = &v["Self"];
         let online = v["BackendState"] == "Running";
         let dns = me["DNSName"].as_str().map(|d| d.trim_end_matches('.').to_owned()).filter(|d| online && !d.is_empty());
-        let ips = if online {
-            me["TailscaleIPs"].as_array().into_iter().flatten().filter_map(Value::as_str).filter(|ip| !ip.contains(':')).map(str::to_owned).collect()
+        let (ips, me_ips, members) = if online {
+            let mine: Vec<IpAddr> = tailscale_ips(me).collect();
+            let mut members: HashSet<IpAddr> = mine.iter().copied().collect();
+            members.extend(v["Peer"].as_object().into_iter().flat_map(|peers| peers.values()).flat_map(tailscale_ips));
+            (mine.iter().filter(|ip| ip.is_ipv4()).map(IpAddr::to_string).collect(), mine, members)
         } else {
-            Vec::new()
+            (Vec::new(), Vec::new(), HashSet::new())
         };
-        return Tailscale { installed: true, online, dns, ips };
+        return Tailscale { installed: true, online, dns, ips, me: me_ips, members };
     }
-    Tailscale { installed: false, online: false, dns: None, ips: Vec::new() }
+    Tailscale { installed: false, online: false, dns: None, ips: Vec::new(), me: Vec::new(), members: HashSet::new() }
 }
 
 /// This computer's address on its local network: the one a route out would leave from
@@ -302,6 +487,12 @@ fn computer_name() -> String {
 
 /// Who may connect: Tailscale and this computer; with `lan`, private networks too.
 pub fn allowed(ip: IpAddr, lan: bool) -> bool {
+    allowed_with(ip, lan, tailnet_member)
+}
+
+/// `allowed`, with `member` saying which addresses are on this tailnet. Tailscale's ranges
+/// alone aren't enough: carrier-grade NAT hands out 100.64.0.0/10 addresses too.
+fn allowed_with(ip: IpAddr, lan: bool, member: impl Fn(IpAddr) -> bool) -> bool {
     let ip = ip.to_canonical();
     if ip.is_loopback() {
         return true;
@@ -310,12 +501,12 @@ pub fn allowed(ip: IpAddr, lan: bool) -> bool {
         IpAddr::V4(v4) => {
             let o = v4.octets();
             let tailscale = o[0] == 100 && (o[1] & 0xC0) == 64;
-            tailscale || (lan && (v4.is_private() || v4.is_link_local()))
+            (tailscale && member(ip)) || (lan && (v4.is_private() || v4.is_link_local()))
         }
         IpAddr::V6(v6) => {
             let s = v6.segments();
             let tailscale = s[0] == 0xfd7a && s[1] == 0x115c && s[2] == 0xa1e0;
-            tailscale || (lan && ((s[0] & 0xfe00) == 0xfc00 || (s[0] & 0xffc0) == 0xfe80))
+            (tailscale && member(ip)) || (lan && ((s[0] & 0xfe00) == 0xfc00 || (s[0] & 0xffc0) == 0xfe80))
         }
     }
 }
@@ -529,21 +720,60 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_tailscale_and_this_computer_unless_lan() {
+    fn only_this_tailnet_and_this_computer_unless_lan() {
         let ip = |s: &str| s.parse::<IpAddr>().unwrap();
-        assert!(allowed(ip("127.0.0.1"), false));
-        assert!(allowed(ip("::1"), false));
-        assert!(allowed(ip("100.101.102.103"), false));
-        assert!(allowed(ip("100.127.255.1"), false));
-        assert!(!allowed(ip("100.128.0.1"), false));
-        assert!(!allowed(ip("100.63.0.1"), false));
-        assert!(allowed(ip("fd7a:115c:a1e0::1"), false));
-        assert!(allowed(ip("::ffff:100.100.1.1"), false));
-        assert!(!allowed(ip("192.168.1.20"), false));
-        assert!(allowed(ip("192.168.1.20"), true));
-        assert!(allowed(ip("10.0.0.5"), true));
-        assert!(!allowed(ip("8.8.8.8"), true));
-        assert!(!allowed(ip("2001:db8::1"), true));
+        let tailnet: HashSet<IpAddr> = ["100.101.102.103", "100.127.255.1", "100.100.1.1", "fd7a:115c:a1e0::1"].map(ip).into();
+        let allowed = |s: &str, lan: bool| allowed_with(ip(s), lan, |a| tailnet.contains(&a));
+        assert!(allowed("127.0.0.1", false));
+        assert!(allowed("::1", false));
+        assert!(allowed("100.101.102.103", false));
+        assert!(allowed("100.127.255.1", false));
+        assert!(allowed("fd7a:115c:a1e0::1", false));
+        assert!(allowed("::ffff:100.100.1.1", false));
+        // Tailscale's range, but not a device on this tailnet: carrier-grade NAT.
+        assert!(!allowed("100.64.0.9", false));
+        assert!(!allowed("100.64.0.9", true));
+        assert!(!allowed("fd7a:115c:a1e0::9", false));
+        assert!(!allowed("100.128.0.1", false));
+        assert!(!allowed("100.63.0.1", false));
+        assert!(!allowed("192.168.1.20", false));
+        assert!(allowed("192.168.1.20", true));
+        assert!(allowed("10.0.0.5", true));
+        assert!(!allowed("8.8.8.8", true));
+        assert!(!allowed("2001:db8::1", true));
+    }
+
+    #[test]
+    fn reads_the_tailnet_from_tailscale_status() {
+        let v = json!({
+            "BackendState": "Running",
+            "Self": { "DNSName": "pc.tail1.ts.net.", "TailscaleIPs": ["100.80.1.2", "fd7a:115c:a1e0::2"] },
+            "Peer": { "k1": { "TailscaleIPs": ["100.90.3.4"] }, "k2": { "TailscaleIPs": ["100.91.5.6", "fd7a:115c:a1e0::6"] } },
+        });
+        let mine: Vec<IpAddr> = tailscale_ips(&v["Self"]).collect();
+        assert_eq!(mine, ["100.80.1.2".parse::<IpAddr>().unwrap(), "fd7a:115c:a1e0::2".parse().unwrap()]);
+        let peers: Vec<IpAddr> = v["Peer"].as_object().unwrap().values().flat_map(tailscale_ips).collect();
+        assert_eq!(peers.len(), 3);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_token_is_kept_encrypted_and_reads_back() {
+        let sealed = protect("0123abcd").unwrap();
+        assert!(!sealed.contains("0123abcd"));
+        assert_eq!(unprotect(&sealed).as_deref(), Some("0123abcd"));
+        assert_eq!(unprotect("zz"), None);
+        assert_eq!(unprotect("00ff"), None);
+    }
+
+    #[test]
+    fn remote_json_never_holds_the_token_in_the_clear_where_it_can_be_encrypted() {
+        let disk = Disk { enabled: true, port: 7425, token: String::new(), token_protected: "abcd".into(), lan: false };
+        let text = serde_json::to_string(&disk).unwrap();
+        assert!(!text.contains("\"token\""), "{text}");
+        // An older file's plain token still reads.
+        let old: Disk = serde_json::from_str(r#"{"enabled":true,"port":7425,"token":"feed","lan":false}"#).unwrap();
+        assert_eq!(old.token, "feed");
     }
 
     #[test]
